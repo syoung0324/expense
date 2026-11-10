@@ -106,38 +106,45 @@
         <!-- Control Panel / Management Actions -->
         <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200">
             <!-- Search Member -->
-            <div class="md:col-span-4 relative">
+            <div class="md:col-span-3 relative">
                 <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
                 <input type="text" id="searchInput" oninput="handleSearch()" placeholder="搜尋隊員姓名..." class="w-full pl-9 pr-4 py-2 text-sm bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition">
             </div>
 
-            <!-- Summary Chips -->
-            <div class="md:col-span-4 flex items-center justify-center gap-3 text-xs sm:text-sm">
-                <div class="bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-1.5 text-indigo-800 flex items-center gap-2">
-                    <span class="text-slate-500">總人數:</span>
-                    <strong id="statMemberCount" class="text-base font-bold text-indigo-600">0</strong> 人
+            <!-- Copied Amount Status Chip & Quick Paste -->
+            <div class="md:col-span-3 flex items-center justify-center sm:justify-start gap-2">
+                <div id="copiedBadge" class="hidden bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2 shadow-sm">
+                    <i class="fa-solid fa-clipboard-check text-emerald-600"></i>
+                    <span>已複製: <strong id="copiedAmountText" class="font-mono font-bold text-emerald-700">0</strong></span>
+                    <button onclick="openBatchPasteModal()" class="ml-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-medium px-2 py-0.5 rounded shadow transition flex items-center gap-1">
+                        <i class="fa-solid fa-paste"></i>
+                        <span>批次貼上</span>
+                    </button>
+                    <button onclick="clearCopiedAmount()" class="text-slate-400 hover:text-rose-500 text-xs" title="清除複製"><i class="fa-solid fa-xmark"></i></button>
                 </div>
-                <div class="bg-amber-50 border border-amber-100 rounded-lg px-3 py-1.5 text-amber-900 flex items-center gap-2">
+            </div>
+
+            <!-- Summary Chips -->
+            <div class="md:col-span-3 flex items-center justify-center gap-2 text-xs sm:text-sm">
+                <div class="bg-indigo-50 border border-indigo-100 rounded-lg px-2.5 py-1.5 text-indigo-800 flex items-center gap-1.5">
+                    <span class="text-slate-500">總人數:</span>
+                    <strong id="statMemberCount" class="text-sm sm:text-base font-bold text-indigo-600">0</strong>
+                </div>
+                <div class="bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-1.5 text-amber-900 flex items-center gap-1.5">
                     <span class="text-slate-500">應收總額:</span>
-                    <strong id="statGrandTotal" class="text-base font-bold text-amber-700">NT$ 0</strong>
+                    <strong id="statGrandTotal" class="text-sm sm:text-base font-bold text-amber-700">NT$ 0</strong>
                 </div>
             </div>
 
             <!-- View Mode Toggle & Action Buttons -->
-            <div class="md:col-span-4 flex flex-wrap items-center justify-end gap-2">
-                <!-- View Mode Switch (Table / Mobile Cards) -->
-                <div class="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
-                    <button id="btnViewTable" onclick="switchViewMode('table')" class="px-2.5 py-1 text-xs font-medium rounded-md bg-white text-indigo-700 shadow-sm transition">
-                        <i class="fa-solid fa-table-cells mr-1"></i>表格
-                    </button>
-                    <button id="btnViewCards" onclick="switchViewMode('cards')" class="px-2.5 py-1 text-xs font-medium rounded-md text-slate-600 hover:text-indigo-600 transition">
-                        <i class="fa-solid fa-address-card mr-1"></i>手機卡片
-                    </button>
+            <div class="md:col-span-3 flex flex-wrap items-center justify-end gap-2">
+                <div class="bg-slate-100 p-1 rounded-lg flex items-center border border-slate-200">
+                    <button id="btnViewTable" onclick="switchViewMode('table')" class="px-2.5 py-1 text-xs font-medium rounded-md bg-white text-indigo-700 shadow-sm transition">表格檢視</button>
+                    <button id="btnViewCards" onclick="switchViewMode('cards')" class="px-2.5 py-1 text-xs font-medium rounded-md text-slate-600 hover:text-indigo-600 transition">卡片檢視</button>
                 </div>
-
                 <button id="btnAddMemberBtn" onclick="openAddMemberModal()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium text-xs sm:text-sm px-2.5 py-1.5 rounded-lg border border-indigo-200 transition flex items-center gap-1 opacity-60 cursor-not-allowed" title="需管理者權限">
                     <i class="fa-solid fa-user-plus text-xs"></i>
-                    <span>新增成員</span>
+                    <span>新增隊員</span>
                 </button>
                 <button id="btnAddColumnBtn" onclick="openAddColumnModal()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs sm:text-sm px-2.5 py-1.5 rounded-lg border border-slate-300 transition flex items-center gap-1 opacity-60 cursor-not-allowed" title="需管理者權限">
                     <i class="fa-solid fa-folder-plus text-xs"></i>
@@ -284,6 +291,45 @@
         </div>
     </div>
 
+    <!-- Modal: Batch Paste Modal -->
+    <div id="batchPasteModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-slate-100 flex flex-col max-h-[85vh]">
+            <div class="flex items-center justify-between border-b pb-3 mb-3">
+                <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                    <i class="fa-solid fa-paste text-indigo-600"></i>
+                    <span>批次貼上金額</span>
+                </h3>
+                <span class="text-xs bg-emerald-50 text-emerald-700 font-mono font-bold px-2.5 py-1 rounded-md border border-emerald-200">
+                    金額: NT$ <span id="batchPasteAmountLabel">0</span>
+                </span>
+            </div>
+
+            <div class="mb-3 space-y-2">
+                <label class="block text-xs font-semibold text-slate-600">請選擇要貼入的目標費用項目 (欄位)：</label>
+                <select id="batchTargetColumnSelect" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500">
+                    <!-- Dynamic Column Options -->
+                </select>
+            </div>
+
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-semibold text-slate-600">選擇要填入的隊員名單：</span>
+                <button type="button" onclick="toggleSelectAllBatchMembers()" class="text-xs text-indigo-600 hover:underline">全選 / 全取消</button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto border border-slate-200 rounded-lg p-2 divide-y divide-slate-100 space-y-1 mb-4" id="batchMemberList">
+                <!-- Dynamic Member Checkboxes -->
+            </div>
+
+            <div class="flex justify-end gap-2 pt-2 border-t">
+                <button type="button" onclick="closeBatchPasteModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs sm:text-sm font-medium">取消</button>
+                <button type="button" onclick="applyBatchPaste()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs sm:text-sm font-medium flex items-center gap-1.5">
+                    <i class="fa-solid fa-check"></i>
+                    <span>確認貼上</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Notification Message -->
     <div id="toast" class="fixed bottom-5 right-5 bg-slate-800 text-white text-xs sm:text-sm px-4 py-3 rounded-lg shadow-lg opacity-0 transition-opacity duration-300 pointer-events-none z-50 flex items-center gap-2">
         <i id="toastIcon" class="fa-solid fa-circle-check text-emerald-400 text-base"></i>
@@ -362,6 +408,7 @@
         let searchQuery = "";
         let isAdminUnlocked = false;
         let viewMode = "table"; // 'table' or 'cards'
+        let copiedAmount = null; // Stored copied value for batch pasting
 
         // Load Application State from LocalStorage
         function initApp() {
@@ -680,13 +727,20 @@
                     columnTotals[col.id] += numVal;
 
                     rowHTML += `
-                        <td class="py-1 px-1 border-r border-slate-100 text-center">
-                            <input type="number" 
-                                value="${val}" 
-                                placeholder="0"
-                                ${!isAdminUnlocked ? 'readonly' : ''}
-                                onchange="updateMemberValue('${member.id}', '${col.id}', this.value)"
-                                class="w-20 px-1 py-0.5 text-right bg-transparent focus:bg-white focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 rounded border ${isAdminUnlocked ? 'hover:border-slate-300 border-transparent' : 'border-transparent cursor-default'} font-mono text-xs sm:text-sm ${numVal < 0 ? 'text-rose-600 font-semibold' : 'text-slate-700'}">
+                        <td class="py-1 px-1 border-r border-slate-100 text-center relative group/cell">
+                            <div class="flex items-center justify-center">
+                                <input type="number" 
+                                    value="${val}" 
+                                    placeholder="0"
+                                    ${!isAdminUnlocked ? 'readonly' : ''}
+                                    onchange="updateMemberValue('${member.id}', '${col.id}', this.value)"
+                                    class="w-20 px-1 py-0.5 text-right bg-transparent focus:bg-white focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 rounded border ${isAdminUnlocked ? 'hover:border-slate-300 border-transparent' : 'border-transparent cursor-default'} font-mono text-xs sm:text-sm ${numVal < 0 ? 'text-rose-600 font-semibold' : 'text-slate-700'}">
+                                ${isAdminUnlocked && val !== "" ? `
+                                    <button onclick="copyAmount(${val}, '${col.id}')" class="opacity-0 group-hover/cell:opacity-100 transition text-slate-400 hover:text-emerald-600 ml-0.5 px-0.5" title="複製此金額">
+                                        <i class="fa-regular fa-copy text-[11px]"></i>
+                                    </button>
+                                ` : ''}
+                            </div>
                         </td>
                     `;
                 });
@@ -749,6 +803,88 @@
             // Update Header Stats
             document.getElementById("statMemberCount").innerText = members.length;
             document.getElementById("statGrandTotal").innerText = `NT$ ${grandTotalSum.toLocaleString()}`;
+        }
+
+        // Copy Amount Helper
+        function copyAmount(val, preferredColId = null) {
+            copiedAmount = parseFloat(val) || 0;
+            document.getElementById("copiedAmountText").innerText = copiedAmount;
+            document.getElementById("copiedBadge").classList.remove("hidden");
+            if (preferredColId) {
+                window.lastCopiedColId = preferredColId;
+            }
+            showToast(`已複製金額 NT$ ${copiedAmount}`);
+        }
+
+        function clearCopiedAmount() {
+            copiedAmount = null;
+            document.getElementById("copiedBadge").classList.add("hidden");
+        }
+
+        // Open Batch Paste Modal
+        function openBatchPasteModal() {
+            if (!isAdminUnlocked) {
+                alert("請先輸入管理者密碼解鎖權限 (密碼: 88888888)");
+                return;
+            }
+            if (copiedAmount === null) {
+                alert("請先點擊任何金額欄位旁邊的複製圖示！");
+                return;
+            }
+
+            document.getElementById("batchPasteAmountLabel").innerText = copiedAmount;
+
+            // Populate Column Select
+            const colSelect = document.getElementById("batchTargetColumnSelect");
+            colSelect.innerHTML = columns.map(c => `<option value="${c.id}" ${window.lastCopiedColId === c.id ? 'selected' : ''}>${c.title}</option>`).join('');
+
+            // Populate Member Checkboxes
+            const memberList = document.getElementById("batchMemberList");
+            memberList.innerHTML = members.map(m => `
+                <label class="flex items-center justify-between p-1.5 hover:bg-slate-50 rounded cursor-pointer text-xs">
+                    <span class="font-medium text-slate-700">${m.name}</span>
+                    <input type="checkbox" value="${m.id}" class="batch-member-checkbox rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4">
+                </label>
+            `).join('');
+
+            document.getElementById("batchPasteModal").classList.remove("hidden");
+        }
+
+        function closeBatchPasteModal() {
+            document.getElementById("batchPasteModal").classList.add("hidden");
+        }
+
+        function toggleSelectAllBatchMembers() {
+            const checkboxes = document.querySelectorAll(".batch-member-checkbox");
+            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+            checkboxes.forEach(cb => cb.checked = !allChecked);
+        }
+
+        function applyBatchPaste() {
+            const targetColId = document.getElementById("batchTargetColumnSelect").value;
+            const checkedIds = Array.from(document.querySelectorAll(".batch-member-checkbox:checked")).map(cb => cb.value);
+
+            if (!targetColId) {
+                alert("請選擇費用項目！");
+                return;
+            }
+            if (checkedIds.length === 0) {
+                alert("請至少勾選一位隊員！");
+                return;
+            }
+
+            checkedIds.forEach(mId => {
+                const member = members.find(m => m.id === mId);
+                if (member) {
+                    member.values[targetColId] = copiedAmount;
+                }
+            });
+
+            saveState();
+            renderTable();
+            renderCards();
+            closeBatchPasteModal();
+            showToast(`已成功將 NT$ ${copiedAmount} 貼入 ${checkedIds.length} 位隊員欄位！`);
         }
 
         // Render Mobile Card View
