@@ -67,6 +67,14 @@
             </div>
             
             <div class="flex flex-wrap items-center gap-2">
+                <!-- File Input (Hidden) -->
+                <input type="file" id="excelFileInput" accept=".xlsx, .xls" class="hidden" onchange="handleExcelImport(event)">
+                
+                <button onclick="document.getElementById('excelFileInput').click()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm px-4 py-2 rounded-lg shadow transition flex items-center gap-2">
+                    <i class="fa-solid fa-file-import text-lg"></i>
+                    <span>匯入 Excel 表單</span>
+                </button>
+
                 <button id="btnExportExcel" onclick="exportToExcel()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm px-4 py-2 rounded-lg shadow transition flex items-center gap-2">
                     <i class="fa-solid fa-file-excel text-lg"></i>
                     <span>匯出 Excel 統計表</span>
@@ -687,6 +695,137 @@
                 toast.classList.remove("opacity-100");
                 toast.classList.add("opacity-0", "pointer-events-none");
             }, 2500);
+        }
+
+        // Import & Parse Excel (.xlsx / .xls)
+        function handleExcelImport(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            if (typeof XLSX === 'undefined') {
+                alert("Excel 解析模組載入失敗，請檢查網路連線。");
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+
+                    // Convert to 2D Array
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+                    if (!jsonData || jsonData.length < 2) {
+                        alert("Excel 內容為空或格式不正確！");
+                        return;
+                    }
+
+                    // Confirm import strategy
+                    if (!confirm("是否將此 Excel 的資料合併寫入統計系統中？\n• 相同的費用項目與隊員將更新金額\n• 新的費用項目與隊員將自動新增")) {
+                        event.target.value = "";
+                        return;
+                    }
+
+                    // Extract Header (First row)
+                    const headerRow = jsonData[0];
+                    let nameColIdx = -1;
+
+                    // Find Name column index
+                    headerRow.forEach((colName, index) => {
+                        if (!colName) return;
+                        const trimmed = String(colName).trim();
+                        if (trimmed === "姓名" || trimmed === "成員姓名" || trimmed === "Name") {
+                            nameColIdx = index;
+                        }
+                    });
+
+                    if (nameColIdx === -1) {
+                        nameColIdx = 0;
+                    }
+
+                    // Map Excel dynamic fee columns into system columns
+                    const excelColMapping = {}; // excelColIdx -> colId
+                    let addedColCount = 0;
+
+                    headerRow.forEach((colName, index) => {
+                        if (index === nameColIdx || !colName) return;
+                        const trimmed = String(colName).trim();
+                        if (trimmed === "應繳金額" || trimmed === "合計" || trimmed === "總計" || trimmed === "#" || trimmed === "序號") {
+                            return;
+                        }
+
+                        // Check if column already exists in system (case-insensitive & trimmed)
+                        let existingCol = columns.find(c => c.title.trim().toLowerCase() === trimmed.toLowerCase());
+                        if (!existingCol) {
+                            existingCol = {
+                                id: "col_" + Date.now() + "_" + Math.random().toString(36).substr(2, 4),
+                                title: trimmed,
+                                note: ""
+                            };
+                            columns.push(existingCol);
+                            addedColCount++;
+                        }
+                        excelColMapping[index] = existingCol.id;
+                    });
+
+                    let updatedMemberCount = 0;
+                    let addedMemberCount = 0;
+
+                    // Parse Data Rows
+                    for (let r = 1; r < jsonData.length; r++) {
+                        const row = jsonData[r];
+                        if (!row || row.length === 0) continue;
+
+                        const rawName = row[nameColIdx];
+                        if (!rawName) continue;
+                        const memberName = String(rawName).trim();
+
+                        // Skip summary rows
+                        if (memberName === "合計" || memberName === "總計" || memberName === "Total") continue;
+
+                        // Check if member already exists in system
+                        let targetMember = members.find(m => m.name.trim().toLowerCase() === memberName.toLowerCase());
+                        if (!targetMember) {
+                            targetMember = {
+                                id: "m_" + Date.now() + "_" + Math.random().toString(36).substr(2, 4),
+                                name: memberName,
+                                values: {}
+                            };
+                            members.push(targetMember);
+                            addedMemberCount++;
+                        } else {
+                            updatedMemberCount++;
+                        }
+
+                        // Fill in values for mapped columns
+                        Object.keys(excelColMapping).forEach(cIdx => {
+                            const colId = excelColMapping[cIdx];
+                            const cellValue = row[cIdx];
+                            const val = parseFloat(cellValue);
+                            
+                            if (cellValue !== undefined && cellValue !== null && cellValue !== "" && !isNaN(val)) {
+                                targetMember.values[colId] = val;
+                            }
+                        });
+                    }
+
+                    // Save and Render
+                    saveState();
+                    renderTable();
+                    showToast(`Excel 匯入完成！新增 ${addedColCount} 個項目、新增 ${addedMemberCount} 位隊員、更新 ${updatedMemberCount} 位隊員金額。`);
+
+                } catch (err) {
+                    console.error(err);
+                    alert("讀取 Excel 檔案時發生錯誤，請確定檔案無損壞。");
+                } finally {
+                    event.target.value = "";
+                }
+            };
+
+            reader.readAsArrayBuffer(file);
         }
 
         // Initialize App on DOM Load
