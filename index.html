@@ -285,7 +285,46 @@
                 <button type="button" onclick="closeExcelSheetModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs sm:text-sm font-medium">取消</button>
                 <button type="button" onclick="confirmImportSelectedSheet()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs sm:text-sm font-medium flex items-center gap-1.5">
                     <i class="fa-solid fa-check"></i>
-                    <span>確認匯入選取分頁</span>
+                    <span>下一步 (處理方式)</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Select Import Option (選擇資料匯入與處理方式 Modal) -->
+    <div id="importOptionModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-5 sm:p-6 border border-slate-100 flex flex-col">
+            <div class="flex items-center gap-2 border-b pb-3 mb-3 text-indigo-700">
+                <i class="fa-solid fa-file-import text-xl text-indigo-600"></i>
+                <h3 class="text-base sm:text-lg font-bold text-slate-800">選擇資料處理方式</h3>
+            </div>
+            <p class="text-xs sm:text-sm text-slate-600 mb-4">
+                您選擇匯入「<span id="importOptionSheetName" class="font-bold text-indigo-600"></span>」工作表至「<span id="importOptionMonthName" class="font-bold text-indigo-600"></span>」，請選擇處理方式：
+            </p>
+            
+            <div class="space-y-3 mb-5">
+                <label class="flex items-start gap-3 p-3 rounded-lg border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/30 cursor-pointer transition">
+                    <input type="radio" name="importModeRadio" value="replace" class="mt-0.5 w-4 h-4 text-indigo-600 focus:ring-indigo-500">
+                    <div>
+                        <div class="text-xs sm:text-sm font-bold text-slate-800">【完全替換】</div>
+                        <div class="text-[11px] sm:text-xs text-slate-500 mt-0.5">清空並刪除「<span class="importOptionMonthText"></span>」原有的隊員名單與數據，完全替換為 Excel 內容。</div>
+                    </div>
+                </label>
+
+                <label class="flex items-start gap-3 p-3 rounded-lg border border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/30 cursor-pointer transition">
+                    <input type="radio" name="importModeRadio" value="merge" checked class="mt-0.5 w-4 h-4 text-indigo-600 focus:ring-indigo-500">
+                    <div>
+                        <div class="text-xs sm:text-sm font-bold text-slate-800">【合併 / 更新】</div>
+                        <div class="text-[11px] sm:text-xs text-slate-500 mt-0.5">保留原有舊隊員，僅更新已有隊員的資料或補充新增隊員數據。</div>
+                    </div>
+                </label>
+            </div>
+
+            <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button type="button" onclick="closeImportOptionModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs sm:text-sm font-medium">取消 (不執行匯入)</button>
+                <button type="button" onclick="executeImportWithMode()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs sm:text-sm font-medium flex items-center gap-1.5">
+                    <i class="fa-solid fa-check"></i>
+                    <span>確認匯入</span>
                 </button>
             </div>
         </div>
@@ -502,6 +541,7 @@
         let viewMode = "table";
         let copiedAmount = null;
         let pendingWorkbook = null;
+        let pendingImportData = null;
         let isAdminLoggedIn = false;
         let draggedMonthKey = null;
 
@@ -1609,14 +1649,41 @@
             }
 
             closeExcelSheetModal();
-            processImportData(jsonData, sheetName);
+            openImportOptionModal(jsonData, sheetName);
         }
 
-        function processImportData(jsonData, sheetName) {
-            if (!isAdminLoggedIn) return;
-            const replaceRosterChoice = confirm(`您選擇匯入「${sheetName}」工作表。\n\n請問要如何處理資料？\n\n【確定】: 完全替換「${currentMonth}」的隊員名單與數據（刪除原有舊隊員）\n【取消】: 保留舊隊員，僅合併/更新數據`);
+        function openImportOptionModal(jsonData, sheetName) {
+            pendingImportData = { jsonData, sheetName };
+            document.getElementById("importOptionSheetName").innerText = sheetName;
+            document.getElementById("importOptionMonthName").innerText = currentMonth;
+            document.querySelectorAll(".importOptionMonthText").forEach(el => el.innerText = currentMonth);
+            document.getElementById("importOptionModal").classList.remove("hidden");
+        }
 
-            if (replaceRosterChoice) {
+        function closeImportOptionModal() {
+            document.getElementById("importOptionModal").classList.add("hidden");
+            pendingImportData = null;
+        }
+
+        function executeImportWithMode() {
+            if (!isAdminLoggedIn || !pendingImportData) return;
+            const selectedRadio = document.querySelector('input[name="importModeRadio"]:checked');
+            if (!selectedRadio) {
+                alert("請選擇一種資料處理方式！");
+                return;
+            }
+
+            const mode = selectedRadio.value; // 'replace' 或 'merge'
+            const { jsonData, sheetName } = pendingImportData;
+
+            closeImportOptionModal();
+            processImportData(jsonData, sheetName, mode);
+        }
+
+        function processImportData(jsonData, sheetName, mode) {
+            if (!isAdminLoggedIn) return;
+
+            if (mode === 'replace') {
                 members = [];
             }
 
@@ -1824,6 +1891,9 @@
             handleExcelImport,
             closeExcelSheetModal,
             confirmImportSelectedSheet,
+            openImportOptionModal,
+            closeImportOptionModal,
+            executeImportWithMode,
             exportToExcel,
             handleSearch,
             showToast
