@@ -123,7 +123,7 @@
                 <div id="copiedBadge" class="hidden bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2 shadow-sm">
                     <i class="fa-solid fa-clipboard-check text-emerald-600"></i>
                     <span>已複製: <strong id="copiedAmountText" class="font-mono font-bold text-emerald-700">0</strong></span>
-                    <button onclick="openBatchPasteModal()" class="ml-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-medium px-2 py-0.5 rounded shadow transition flex items-center gap-1">
+                    <button id="btnBatchPaste" onclick="openBatchPasteModal()" class="ml-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-medium px-2 py-0.5 rounded shadow transition flex items-center gap-1">
                         <i class="fa-solid fa-paste"></i>
                         <span>批次貼上</span>
                     </button>
@@ -600,7 +600,8 @@
                 document.getElementById("btnAddMemberBtn"),
                 document.getElementById("btnAddColumnBtn"),
                 document.getElementById("btnImportExcel"),
-                document.getElementById("btnExportExcel")
+                document.getElementById("btnExportExcel"),
+                document.getElementById("btnBatchPaste")
             ];
 
             if (isAdminLoggedIn) {
@@ -675,7 +676,6 @@
             }
         }
 
-        // 核心寫入 Firestore 方法：移除 merge: true，完全覆寫文件以確保被刪除的月份自雲端徹底刪除
         async function saveState() {
             if (currentMonth && monthsData[currentMonth]) {
                 monthsData[currentMonth] = { columns, members };
@@ -696,7 +696,7 @@
             }
         }
 
-        // 月份欄位 Drag and Drop 拖曳排序處理（僅管理者權限啟用）
+        // 月份拖曳排序事件
         function handleMonthDragStart(e, mKey) {
             if (!isAdminLoggedIn) return;
             draggedMonthKey = mKey;
@@ -785,10 +785,7 @@
         }
 
         function openEditMonthModal(mKey) {
-            if (!isAdminLoggedIn) {
-                alert("需有管理者權限才能編輯月份！");
-                return;
-            }
+            if (!isAdminLoggedIn) return;
             document.getElementById("oldMonthNameInput").value = mKey;
             document.getElementById("newMonthNameInput").value = mKey;
             document.getElementById("editMonthModal").classList.remove("hidden");
@@ -899,10 +896,7 @@
         }
 
         function deleteMonth(mKey) {
-            if (!isAdminLoggedIn) {
-                alert("需有管理者權限才能刪除月份！");
-                return;
-            }
+            if (!isAdminLoggedIn) return;
             if (Object.keys(monthsData).length <= 1) {
                 alert("至少需要保留一個月份！");
                 return;
@@ -954,6 +948,10 @@
         }
 
         function openBatchPasteModal() {
+            if (!isAdminLoggedIn) {
+                alert("需有管理者權限才能批次貼上修改金額！");
+                return;
+            }
             if (copiedAmount === null) {
                 alert("請先複製金額！");
                 return;
@@ -993,6 +991,7 @@
         }
 
         function applyBatchPaste() {
+            if (!isAdminLoggedIn) return;
             const targetColId = document.getElementById("batchTargetColumnSelect").value;
             if (!targetColId) {
                 alert("請選擇目標項目欄位！");
@@ -1084,7 +1083,7 @@
                             <div class="flex items-center justify-between gap-1">
                                 <div class="flex items-center gap-1.5 truncate">
                                     ${isCheckedPaid ? `<i class="fa-solid fa-circle-check text-emerald-500 text-sm" title="對帳完成"></i>` : `<i class="fa-regular fa-circle text-slate-300 text-xs"></i>`}
-                                    <span class="truncate cursor-pointer hover:text-indigo-600 transition ${isCheckedPaid ? 'font-semibold text-emerald-900' : ''}" onclick="${isAdminLoggedIn ? `openEditMemberModal('${member.id}')` : ''}">${member.name}</span>
+                                    <span class="truncate ${isAdminLoggedIn ? 'cursor-pointer hover:text-indigo-600' : ''} transition ${isCheckedPaid ? 'font-semibold text-emerald-900' : ''}" onclick="${isAdminLoggedIn ? `openEditMemberModal('${member.id}')` : ''}">${member.name}</span>
                                 </div>
                                 ${isAdminLoggedIn ? `
                                     <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
@@ -1106,14 +1105,28 @@
                     memberTotal += numVal;
                     columnTotals[col.id] += numVal;
 
+                    // 金額格呈現：僅有管理者權限才顯示 <input> 可編輯，一般使用者顯示純文字
+                    let cellInputHTML = "";
+                    if (isAdminLoggedIn) {
+                        cellInputHTML = `
+                            <input type="number"
+                                value="${val}"
+                                placeholder="0"
+                                onchange="updateMemberValue('${member.id}', '${col.id}', this.value)"
+                                class="w-20 px-1 py-0.5 text-right bg-transparent focus:bg-white focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 rounded border hover:border-slate-300 border-transparent font-mono text-xs sm:text-sm ${numVal < 0 ? 'text-rose-600 font-semibold' : 'text-slate-700'}">
+                        `;
+                    } else {
+                        cellInputHTML = `
+                            <span class="w-20 inline-block px-1 py-0.5 text-right font-mono text-xs sm:text-sm ${numVal < 0 ? 'text-rose-600 font-semibold' : 'text-slate-700'}">
+                                ${val !== "" ? val : '0'}
+                            </span>
+                        `;
+                    }
+
                     rowHTML += `
                         <td class="py-1 px-1 border-r border-slate-100 text-center relative group/cell">
                             <div class="flex items-center justify-center">
-                                <input type="number"
-                                    value="${val}"
-                                    placeholder="0"
-                                    onchange="updateMemberValue('${member.id}', '${col.id}', this.value)"
-                                    class="w-20 px-1 py-0.5 text-right bg-transparent focus:bg-white focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 rounded border hover:border-slate-300 border-transparent font-mono text-xs sm:text-sm ${numVal < 0 ? 'text-rose-600 font-semibold' : 'text-slate-700'}">
+                                ${cellInputHTML}
                                 ${val !== "" ? `
                                     <button onclick="copyAmount(${val}, '${col.id}')" class="opacity-0 group-hover/cell:opacity-100 transition text-slate-400 hover:text-emerald-600 ml-0.5 px-0.5" title="複製此金額">
                                         <i class="fa-regular fa-copy text-[11px]"></i>
@@ -1126,13 +1139,15 @@
 
                 grandTotalSum += memberTotal;
 
+                // 姜宸媽對帳區勾選框：僅管理者可勾選，一般使用者 disable 鎖定
                 rowHTML += `
                         <td class="py-2 px-3 text-center border-r border-rose-100 bg-rose-50/20">
                             <input type="checkbox"
                                 ${isCheckedPaid ? 'checked' : ''}
+                                ${isAdminLoggedIn ? '' : 'disabled'}
                                 onchange="toggleMemberPaid('${member.id}', this.checked)"
-                                class="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 cursor-pointer"
-                                title="${isCheckedPaid ? '對帳完成' : '未對帳'}">
+                                class="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 ${isAdminLoggedIn ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}"
+                                title="${isAdminLoggedIn ? (isCheckedPaid ? '對帳完成' : '未對帳') : '需管理者權限才能對帳'}">
                         </td>
                         <td class="py-2 px-3 text-right font-bold text-indigo-700 sticky-right bg-white group-hover:bg-slate-50 border-l border-slate-200 font-mono shadow-sm whitespace-nowrap">
                             ${memberTotal.toLocaleString()}
@@ -1194,6 +1209,11 @@
         }
 
         function updateMemberValue(memberId, colId, value) {
+            if (!isAdminLoggedIn) {
+                alert("需有管理者權限才能修改金額！");
+                renderTable();
+                return;
+            }
             const member = members.find(m => m.id === memberId);
             if (member) {
                 if (value === "" || isNaN(value)) {
@@ -1208,6 +1228,12 @@
         }
 
         function toggleMemberPaid(memberId, isChecked) {
+            if (!isAdminLoggedIn) {
+                alert("需有管理者權限才能進行對帳操作！");
+                renderTable();
+                renderCards();
+                return;
+            }
             const member = members.find(m => m.id === memberId);
             if (member) {
                 member.isPaid = isChecked;
@@ -1261,8 +1287,8 @@
                             </div>
                             <div class="text-xs text-slate-500 mb-3 flex items-center justify-between">
                                 <span>已登錄項目: <strong class="text-slate-700">${activeFeeCount}</strong> 項</span>
-                                <label class="inline-flex items-center gap-1 cursor-pointer">
-                                    <input type="checkbox" ${isCheckedPaid ? 'checked' : ''} onchange="toggleMemberPaid('${member.id}', this.checked)" class="rounded text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5">
+                                <label class="inline-flex items-center gap-1 ${isAdminLoggedIn ? 'cursor-pointer' : 'cursor-not-allowed'}">
+                                    <input type="checkbox" ${isCheckedPaid ? 'checked' : ''} ${isAdminLoggedIn ? '' : 'disabled'} onchange="toggleMemberPaid('${member.id}', this.checked)" class="rounded text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5 ${isAdminLoggedIn ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}">
                                     <span class="text-[11px] font-semibold text-rose-700">姜宸媽對帳</span>
                                 </label>
                             </div>
@@ -1270,7 +1296,7 @@
                         <div class="flex gap-2 pt-2 border-t border-slate-50">
                             <button onclick="openMobileEditModal('${member.id}')" class="flex-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium text-xs py-2 rounded-lg transition flex items-center justify-center gap-1">
                                 <i class="fa-solid fa-pen-to-square"></i>
-                                <span>編輯費用項目</span>
+                                <span>${isAdminLoggedIn ? '編輯費用項目' : '檢視費用明細'}</span>
                             </button>
                             ${isAdminLoggedIn ? `
                                 <button onclick="deleteMember('${member.id}')" class="bg-rose-50 hover:bg-rose-100 text-rose-600 px-3 py-2 rounded-lg text-xs font-medium transition" title="刪除隊員">
@@ -1288,7 +1314,7 @@
             const member = members.find(m => m.id === memberId);
             if (!member) return;
 
-            document.getElementById("mobileEditModalName").innerText = `${member.name} - 費用明細編輯`;
+            document.getElementById("mobileEditModalName").innerText = `${member.name} - 費用明細${isAdminLoggedIn ? '編輯' : '檢視'}`;
            
             let total = 0;
             let html = "";
@@ -1301,8 +1327,9 @@
                         <input type="number"
                             value="${val}"
                             placeholder="0"
+                            ${isAdminLoggedIn ? '' : 'disabled'}
                             onchange="updateMemberValue('${member.id}', '${col.id}', this.value); updateMobileModalTotal('${member.id}')"
-                            class="w-28 px-2 py-1 text-right bg-white border border-slate-300 rounded-md font-mono text-xs focus:ring-2 focus:ring-indigo-500">
+                            class="w-28 px-2 py-1 text-right bg-white border border-slate-300 rounded-md font-mono text-xs focus:ring-2 focus:ring-indigo-500 ${isAdminLoggedIn ? '' : 'bg-slate-100 text-slate-500 cursor-not-allowed'}">
                     </div>
                 `;
             });
