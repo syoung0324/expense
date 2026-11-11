@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>團隊費用統計與管理系統</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -17,20 +17,19 @@
             font-family: 'Inter', sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial;
         }
         ::-webkit-scrollbar {
-            width: 10px;
-            height: 12px;
+            width: 6px;
+            height: 8px;
         }
         ::-webkit-scrollbar-track {
             background: #f1f5f9;
-            border-radius: 6px;
+            border-radius: 4px;
         }
         ::-webkit-scrollbar-thumb {
-            background: #94a3b8;
-            border-radius: 6px;
-            border: 2px solid #f1f5f9;
+            background: #cbd5e1;
+            border-radius: 4px;
         }
         ::-webkit-scrollbar-thumb:hover {
-            background: #64748b;
+            background: #94a3b8;
         }
         .sticky-col-1 {
             position: sticky;
@@ -39,8 +38,17 @@
         }
         .sticky-col-2 {
             position: sticky;
-            left: 50px;
+            left: 40px;
             z-index: 10;
+        }
+        @media (min-width: 640px) {
+            .sticky-col-2 {
+                left: 48px;
+            }
+            ::-webkit-scrollbar {
+                width: 8px;
+                height: 10px;
+            }
         }
         .sticky-right {
             position: sticky;
@@ -49,32 +57,32 @@
         }
     </style>
 </head>
-<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
 
     <!-- Header / Navigation -->
-    <header class="bg-indigo-700 text-white shadow-md">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
+    <header class="bg-indigo-700 text-white shadow-md sticky top-0 z-30">
+        <div class="w-full max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-4 flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3">
             <div class="flex items-center space-x-3">
-                <div class="p-2 bg-indigo-600 rounded-lg shadow-inner">
-                    <i class="fa-solid fa-receipt text-2xl text-amber-300"></i>
+                <div class="p-2 bg-indigo-600 rounded-lg shadow-inner shrink-0">
+                    <i class="fa-solid fa-receipt text-xl sm:text-2xl text-amber-300"></i>
                 </div>
-                <div>
-                    <div class="flex items-center gap-2">
-                        <h1 class="text-xl font-bold tracking-tight">團隊與球隊費用統計管理系統</h1>
+                <div class="min-w-0 flex-1">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <h1 class="text-base sm:text-xl font-bold tracking-tight truncate">團隊與球隊費用統計管理系統</h1>
                         <!-- Firestore 雲端同步狀態標籤 -->
-                        <div id="syncStatusBadge" class="flex items-center gap-1.5 bg-indigo-800/90 text-emerald-300 text-[11px] px-2.5 py-0.5 rounded-full border border-indigo-500/50 shadow-inner">
-                            <i id="syncStatusIcon" class="fa-solid fa-cloud-arrow-up text-xs"></i>
+                        <div id="syncStatusBadge" class="flex items-center gap-1 bg-indigo-800/90 text-emerald-300 text-[10px] sm:text-[11px] px-2 py-0.5 rounded-full border border-indigo-500/50 shadow-inner shrink-0">
+                            <i id="syncStatusIcon" class="fa-solid fa-cloud-arrow-up text-[10px]"></i>
                             <span id="syncStatusText">連線中...</span>
                         </div>
                     </div>
-                    <p class="text-xs text-indigo-200">分月支出明細、自選複製項目、Excel多分頁匯入與 Firestore 雲端同步</p>
+                    <p class="text-[11px] sm:text-xs text-indigo-200 truncate hidden sm:block">分月支出明細、自選複製項目、Excel多分頁匯入與 Firestore 雲端同步</p>
                 </div>
             </div>
            
-            <div class="flex flex-wrap items-center gap-2">
-                <!-- 管理者登入按鈕 (附帶 🦩 紅鶴圖示) -->
-                <button id="btnAdminLogin" onclick="handleAdminBtnClick()" class="bg-indigo-800 hover:bg-indigo-600 text-white font-medium text-xs sm:text-sm px-3 py-2 rounded-lg shadow transition flex items-center gap-1.5 border border-indigo-400/40">
-                    <span class="text-base">🦩</span>
+            <div class="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2 shrink-0">
+                <!-- 管理者登入按鈕 -->
+                <button id="btnAdminLogin" onclick="handleAdminBtnClick()" class="bg-indigo-800 hover:bg-indigo-600 text-white font-medium text-xs sm:text-sm px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg shadow transition flex items-center gap-1.5 border border-indigo-400/40">
+                    <span class="text-sm sm:text-base">🦩</span>
                     <span id="adminBtnText">管理者登入</span>
                 </button>
 
@@ -82,89 +90,93 @@
                 <input type="file" id="excelFileInput" accept=".xlsx, .xls" class="hidden" onchange="handleExcelImport(event)">
                
                 <!-- 僅管理者登入後顯示：匯入 Excel & 匯出 Excel -->
-                <button id="btnImportExcel" onclick="triggerExcelImport()" class="hidden bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs sm:text-sm px-3 py-2 rounded-lg shadow transition flex items-center gap-1.5">
-                    <i class="fa-solid fa-file-import text-base"></i>
-                    <span>匯入 Excel</span>
+                <button id="btnImportExcel" onclick="triggerExcelImport()" class="hidden bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs sm:text-sm px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg shadow transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-file-import text-xs sm:text-sm"></i>
+                    <span class="hidden xs:inline">匯入</span> Excel
                 </button>
 
-                <button id="btnExportExcel" onclick="exportToExcel()" class="hidden bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs sm:text-sm px-3 py-2 rounded-lg shadow transition flex items-center gap-1.5">
-                    <i class="fa-solid fa-file-excel text-base"></i>
-                    <span>匯出 Excel</span>
+                <button id="btnExportExcel" onclick="exportToExcel()" class="hidden bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs sm:text-sm px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg shadow transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-file-excel text-xs sm:text-sm"></i>
+                    <span class="hidden xs:inline">匯出</span> Excel
                 </button>
             </div>
         </div>
     </header>
 
     <!-- Main Container -->
-    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-col gap-4">
+    <main class="flex-1 w-full max-w-[1600px] mx-auto px-2 sm:px-6 lg:px-8 py-3 sm:py-5 flex flex-col gap-3 sm:gap-4">
 
-        <!-- Month Navigation Tabs (僅管理者可拖曳與編輯) -->
-        <div class="flex items-center justify-between bg-white p-2 sm:p-3 rounded-xl shadow-sm border border-slate-200 overflow-x-auto gap-2">
-            <div class="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0" id="monthTabsContainer">
+        <!-- Month Navigation Tabs -->
+        <div class="flex items-center justify-between bg-white p-2 rounded-xl shadow-sm border border-slate-200 overflow-x-auto gap-2">
+            <div class="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-thin" id="monthTabsContainer">
                 <!-- Dynamic Month Tabs -->
             </div>
             <!-- 僅管理者登入後顯示：新增月份 -->
-            <button id="btnAddMonthBtn" onclick="openAddMonthModal()" class="hidden shrink-0 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium text-xs sm:text-sm px-3 py-1.5 rounded-lg border border-indigo-200 transition flex items-center gap-1">
+            <button id="btnAddMonthBtn" onclick="openAddMonthModal()" class="hidden shrink-0 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium text-xs sm:text-sm px-2.5 sm:px-3 py-1.5 rounded-lg border border-indigo-200 transition flex items-center gap-1">
                 <i class="fa-solid fa-plus text-xs"></i>
-                <span>新增月份</span>
+                <span class="whitespace-nowrap">新增月份</span>
             </button>
         </div>
 
         <!-- Control Panel / Management Actions -->
-        <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-2.5 sm:gap-3 items-center bg-white p-3 sm:p-4 rounded-xl shadow-sm border border-slate-200">
             <!-- Search Member -->
-            <div class="md:col-span-3 relative">
-                <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                <input type="text" id="searchInput" oninput="handleSearch()" placeholder="搜尋隊員姓名..." class="w-full pl-9 pr-4 py-2 text-sm bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition">
+            <div class="lg:col-span-3 relative">
+                <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs sm:text-sm"></i>
+                <input type="text" id="searchInput" oninput="handleSearch()" placeholder="搜尋隊員姓名..." class="w-full pl-8 sm:pl-9 pr-3 sm:pr-4 py-1.5 sm:py-2 text-xs sm:text-sm bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition">
             </div>
 
             <!-- Copied Amount Status Chip & Quick Paste -->
-            <div class="md:col-span-3 flex items-center justify-center sm:justify-start gap-2">
-                <div id="copiedBadge" class="hidden bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2 shadow-sm">
-                    <i class="fa-solid fa-clipboard-check text-emerald-600"></i>
-                    <span>已複製: <strong id="copiedAmountText" class="font-mono font-bold text-emerald-700">0</strong></span>
-                    <button id="btnBatchPaste" onclick="openBatchPasteModal()" class="ml-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-medium px-2 py-0.5 rounded shadow transition flex items-center gap-1">
-                        <i class="fa-solid fa-paste"></i>
-                        <span>批次貼上</span>
-                    </button>
-                    <button onclick="clearCopiedAmount()" class="text-slate-400 hover:text-rose-500 text-xs" title="清除複製"><i class="fa-solid fa-xmark"></i></button>
+            <div class="lg:col-span-3 flex items-center justify-start sm:justify-center lg:justify-start gap-2">
+                <div id="copiedBadge" class="hidden bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs px-2.5 sm:px-3 py-1.5 rounded-lg flex items-center gap-1.5 sm:gap-2 shadow-sm w-full sm:w-auto justify-between sm:justify-start">
+                    <div class="flex items-center gap-1.5">
+                        <i class="fa-solid fa-clipboard-check text-emerald-600"></i>
+                        <span>已複製: <strong id="copiedAmountText" class="font-mono font-bold text-emerald-700">0</strong></span>
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <button id="btnBatchPaste" onclick="openBatchPasteModal()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] sm:text-[11px] font-medium px-2 py-0.5 rounded shadow transition flex items-center gap-1">
+                            <i class="fa-solid fa-paste"></i>
+                            <span>批次貼上</span>
+                        </button>
+                        <button onclick="clearCopiedAmount()" class="text-slate-400 hover:text-rose-500 text-xs p-0.5" title="清除複製"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
                 </div>
             </div>
 
             <!-- Summary Chips -->
-            <div class="md:col-span-3 flex items-center justify-center gap-2 text-xs sm:text-sm">
-                <div class="bg-indigo-50 border border-indigo-100 rounded-lg px-2.5 py-1.5 text-indigo-800 flex items-center gap-1.5">
-                    <span class="text-slate-500">總人數:</span>
-                    <strong id="statMemberCount" class="text-sm sm:text-base font-bold text-indigo-600">0</strong>
+            <div class="lg:col-span-3 flex items-center justify-between sm:justify-center gap-2 text-xs sm:text-sm">
+                <div class="flex-1 sm:flex-none bg-indigo-50 border border-indigo-100 rounded-lg px-2.5 py-1.5 text-indigo-800 flex items-center justify-center gap-1.5">
+                    <span class="text-slate-500 text-xs">總人數:</span>
+                    <strong id="statMemberCount" class="text-xs sm:text-base font-bold text-indigo-600">0</strong>
                 </div>
-                <div class="bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-1.5 text-amber-900 flex items-center gap-1.5">
-                    <span class="text-slate-500">應收總額:</span>
-                    <strong id="statGrandTotal" class="text-sm sm:text-base font-bold text-amber-700">NT$ 0</strong>
+                <div class="flex-1 sm:flex-none bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-1.5 text-amber-900 flex items-center justify-center gap-1.5">
+                    <span class="text-slate-500 text-xs">應收總額:</span>
+                    <strong id="statGrandTotal" class="text-xs sm:text-base font-bold text-amber-700">NT$ 0</strong>
                 </div>
             </div>
 
             <!-- View Mode Toggle & Action Buttons -->
-            <div class="md:col-span-3 flex flex-wrap items-center justify-end gap-2">
-                <div class="bg-slate-100 p-1 rounded-lg flex items-center border border-slate-200">
-                    <button id="btnViewTable" onclick="switchViewMode('table')" class="px-2.5 py-1 text-xs font-medium rounded-md bg-white text-indigo-700 shadow-sm transition">表格檢視</button>
-                    <button id="btnViewCards" onclick="switchViewMode('cards')" class="px-2.5 py-1 text-xs font-medium rounded-md text-slate-600 hover:text-indigo-600 transition">卡片檢視</button>
+            <div class="lg:col-span-3 flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
+                <div class="bg-slate-100 p-1 rounded-lg flex items-center border border-slate-200 shrink-0">
+                    <button id="btnViewTable" onclick="switchViewMode('table')" class="px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-medium rounded-md bg-white text-indigo-700 shadow-sm transition">表格檢視</button>
+                    <button id="btnViewCards" onclick="switchViewMode('cards')" class="px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-medium rounded-md text-slate-600 hover:text-indigo-600 transition">卡片檢視</button>
                 </div>
                 <!-- 僅管理者登入後顯示：新增隊員 & 新增項目 -->
-                <button id="btnAddMemberBtn" onclick="openAddMemberModal()" class="hidden bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium text-xs sm:text-sm px-2.5 py-1.5 rounded-lg border border-indigo-200 transition flex items-center gap-1">
+                <button id="btnAddMemberBtn" onclick="openAddMemberModal()" class="hidden bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium text-xs sm:text-sm px-2 sm:px-2.5 py-1.5 rounded-lg border border-indigo-200 transition flex items-center gap-1">
                     <i class="fa-solid fa-user-plus text-xs"></i>
-                    <span>新增隊員</span>
+                    <span class="whitespace-nowrap">隊員</span>
                 </button>
-                <button id="btnAddColumnBtn" onclick="openAddColumnModal()" class="hidden bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs sm:text-sm px-2.5 py-1.5 rounded-lg border border-slate-300 transition flex items-center gap-1">
+                <button id="btnAddColumnBtn" onclick="openAddColumnModal()" class="hidden bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs sm:text-sm px-2 sm:px-2.5 py-1.5 rounded-lg border border-slate-300 transition flex items-center gap-1">
                     <i class="fa-solid fa-folder-plus text-xs"></i>
-                    <span>新增項目</span>
+                    <span class="whitespace-nowrap">項目</span>
                 </button>
             </div>
         </div>
 
         <!-- Desktop / Scrollable Table View -->
-        <div id="tableViewContainer" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex-1 flex flex-col">
-            <div class="overflow-x-auto flex-1 relative max-h-[calc(100vh-310px)] min-h-[400px] border-b border-slate-200 pb-2">
-                <table id="expenseTable" class="min-w-max text-left border-collapse text-xs sm:text-sm">
+        <div id="tableViewContainer" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex-1 flex flex-col min-h-[350px]">
+            <div class="overflow-auto flex-1 relative max-h-[calc(100vh-250px)] min-h-[300px]">
+                <table id="expenseTable" class="min-w-max w-full text-left border-collapse text-xs sm:text-sm">
                     <thead>
                         <tr class="bg-slate-100 text-slate-700 border-b border-slate-200 sticky top-0 z-20 font-semibold select-none" id="tableHeaderRow">
                             <!-- Dynamic Header Generated JS -->
@@ -173,7 +185,7 @@
                     <tbody id="tableBody" class="divide-y divide-slate-100">
                         <!-- Dynamic Rows Generated JS -->
                     </tbody>
-                    <tfoot id="tableFooter" class="bg-indigo-50/90 text-indigo-950 font-bold sticky bottom-0 z-20 border-t-2 border-indigo-200">
+                    <tfoot id="tableFooter" class="bg-indigo-50/95 text-indigo-950 font-bold sticky bottom-0 z-20 border-t-2 border-indigo-200 shadow-inner">
                         <!-- Dynamic Column Totals Generated JS -->
                     </tfoot>
                 </table>
@@ -181,18 +193,18 @@
         </div>
 
         <!-- Mobile Card View (Optimized for Small Screens) -->
-        <div id="cardsViewContainer" class="hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div id="cardsViewContainer" class="hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             <!-- Dynamic Member Cards JS -->
         </div>
 
     </main>
 
-    <!-- Modal: Admin Login (管理者登入視窗) -->
+    <!-- Modal: Admin Login -->
     <div id="adminModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 border border-slate-100">
+        <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-5 sm:p-6 border border-slate-100">
             <div class="flex items-center gap-2 mb-4 text-indigo-700">
                 <span class="text-2xl">🦩</span>
-                <h3 class="text-lg font-bold text-slate-800">管理者身分登入</h3>
+                <h3 class="text-base sm:text-lg font-bold text-slate-800">管理者身分登入</h3>
             </div>
             <div class="mb-4">
                 <label class="block text-xs font-semibold text-slate-600 mb-1" for="adminPasswordInput">管理者密碼</label>
@@ -207,8 +219,8 @@
 
     <!-- Modal: Add New Month -->
     <div id="monthModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-slate-100 max-h-[85vh] flex flex-col">
-            <h3 class="text-lg font-bold text-slate-800 mb-3">新增月份帳目</h3>
+        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-5 sm:p-6 border border-slate-100 max-h-[85vh] flex flex-col">
+            <h3 class="text-base sm:text-lg font-bold text-slate-800 mb-3">新增月份帳目</h3>
             
             <div class="mb-3">
                 <label class="block text-xs font-semibold text-slate-600 mb-1" for="monthNameInput">月份名稱</label>
@@ -240,10 +252,10 @@
         </div>
     </div>
 
-    <!-- Modal: Edit Month Name (修改月份名稱) -->
+    <!-- Modal: Edit Month Name -->
     <div id="editMonthModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 border border-slate-100">
-            <h3 class="text-lg font-bold text-slate-800 mb-3">修改月份名稱</h3>
+        <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-5 sm:p-6 border border-slate-100">
+            <h3 class="text-base sm:text-lg font-bold text-slate-800 mb-3">修改月份名稱</h3>
             <input type="hidden" id="oldMonthNameInput">
             <div class="mb-4">
                 <label class="block text-xs font-semibold text-slate-600 mb-1" for="newMonthNameInput">新月份名稱</label>
@@ -256,12 +268,12 @@
         </div>
     </div>
 
-    <!-- Modal: Select Excel Sheet (選擇要匯入的 Excel 分頁) -->
+    <!-- Modal: Select Excel Sheet -->
     <div id="excelSheetModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-slate-100 flex flex-col max-h-[85vh]">
+        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-5 sm:p-6 border border-slate-100 flex flex-col max-h-[85vh]">
             <div class="flex items-center gap-2 border-b pb-3 mb-3 text-indigo-700">
                 <i class="fa-solid fa-file-excel text-xl text-emerald-600"></i>
-                <h3 class="text-lg font-bold text-slate-800">選擇要匯入的工作表 (分頁)</h3>
+                <h3 class="text-base sm:text-lg font-bold text-slate-800">選擇要匯入的工作表 (分頁)</h3>
             </div>
             <p class="text-xs text-slate-500 mb-3">請選擇您欲將資料匯入至「<span id="targetImportMonthLabel" class="font-bold text-indigo-600"></span>」的 Excel 工作表：</p>
             
@@ -281,8 +293,8 @@
 
     <!-- Modal: Add / Edit Member -->
     <div id="memberModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-slate-100">
-            <h3 class="text-lg font-bold text-slate-800 mb-4" id="memberModalTitle">新增成員</h3>
+        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-5 sm:p-6 border border-slate-100">
+            <h3 class="text-base sm:text-lg font-bold text-slate-800 mb-4" id="memberModalTitle">新增成員</h3>
             <input type="hidden" id="editMemberId">
             <div class="mb-4">
                 <label class="block text-xs font-semibold text-slate-600 mb-1" for="memberNameInput">成員姓名</label>
@@ -303,8 +315,8 @@
 
     <!-- Modal: Add / Edit Column -->
     <div id="columnModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-slate-100">
-            <h3 class="text-lg font-bold text-slate-800 mb-4" id="columnModalTitle">新增費用支出項目 (欄位)</h3>
+        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-5 sm:p-6 border border-slate-100">
+            <h3 class="text-base sm:text-lg font-bold text-slate-800 mb-4" id="columnModalTitle">新增費用支出項目 (欄位)</h3>
             <input type="hidden" id="editColumnId">
             <div class="mb-4">
                 <label class="block text-xs font-semibold text-slate-600 mb-1" for="columnTitleInput">費用項目名稱</label>
@@ -323,13 +335,13 @@
     </div>
 
     <!-- Modal: Mobile Member Fee Edit Modal -->
-    <div id="mobileEditModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-xl max-w-lg w-full p-5 border border-slate-100 max-h-[90vh] flex flex-col">
-            <div class="flex items-center justify-between border-b pb-3 mb-3">
-                <h3 class="text-base font-bold text-slate-800" id="mobileEditModalName">隊員費用編輯</h3>
-                <span id="mobileEditModalTotal" class="text-sm font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-md">應繳: NT$ 0</span>
+    <div id="mobileEditModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-3 sm:p-4">
+        <div class="bg-white rounded-xl shadow-xl max-w-lg w-full p-4 sm:p-5 border border-slate-100 max-h-[90vh] flex flex-col">
+            <div class="flex items-center justify-between border-b pb-3 mb-3 gap-2">
+                <h3 class="text-sm sm:text-base font-bold text-slate-800 truncate" id="mobileEditModalName">隊員費用編輯</h3>
+                <span id="mobileEditModalTotal" class="text-xs sm:text-sm font-bold text-indigo-700 bg-indigo-50 px-2 py-1 rounded-md shrink-0">應繳: NT$ 0</span>
             </div>
-            <div class="flex-1 overflow-y-auto space-y-3 pr-1" id="mobileEditFormBody">
+            <div class="flex-1 overflow-y-auto space-y-2 sm:space-y-3 pr-1" id="mobileEditFormBody">
                 <!-- Dynamic Fee Inputs -->
             </div>
             <div class="flex justify-end pt-3 mt-2 border-t">
@@ -340,12 +352,12 @@
 
     <!-- Modal: Column Note View Modal -->
     <div id="noteModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-slate-100">
+        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-5 sm:p-6 border border-slate-100">
             <div class="flex items-center gap-2 mb-3 text-indigo-700">
                 <i class="fa-solid fa-circle-info text-xl text-amber-500"></i>
-                <h3 class="text-lg font-bold text-slate-800" id="noteModalTitle">項目說明</h3>
+                <h3 class="text-base sm:text-lg font-bold text-slate-800" id="noteModalTitle">項目說明</h3>
             </div>
-            <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm text-slate-700 whitespace-pre-line min-h-[80px]" id="noteModalContent">
+            <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 text-xs sm:text-sm text-slate-700 whitespace-pre-line min-h-[80px]" id="noteModalContent">
                 <!-- Dynamic Content -->
             </div>
             <div class="flex justify-end mt-4">
@@ -356,9 +368,9 @@
 
     <!-- Modal: Batch Paste Modal -->
     <div id="batchPasteModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-slate-100 flex flex-col max-h-[85vh]">
+        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-5 sm:p-6 border border-slate-100 flex flex-col max-h-[85vh]">
             <div class="flex items-center justify-between border-b pb-3 mb-3">
-                <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                <h3 class="text-sm sm:text-base font-bold text-slate-800 flex items-center gap-2">
                     <i class="fa-solid fa-paste text-indigo-600"></i>
                     <span>批次貼上金額</span>
                 </h3>
@@ -394,8 +406,8 @@
     </div>
 
     <!-- Toast Notification Message -->
-    <div id="toast" class="fixed bottom-5 right-5 bg-slate-800 text-white text-xs sm:text-sm px-4 py-3 rounded-lg shadow-lg opacity-0 transition-opacity duration-300 pointer-events-none z-50 flex items-center gap-2">
-        <i id="toastIcon" class="fa-solid fa-circle-check text-emerald-400 text-base"></i>
+    <div id="toast" class="fixed bottom-4 right-4 sm:bottom-5 sm:right-5 bg-slate-800 text-white text-xs sm:text-sm px-3.5 py-2.5 sm:px-4 sm:py-3 rounded-lg shadow-lg opacity-0 transition-opacity duration-300 pointer-events-none z-50 flex items-center gap-2">
+        <i id="toastIcon" class="fa-solid fa-circle-check text-emerald-400 text-sm sm:text-base"></i>
         <span id="toastText">操作成功</span>
     </div>
 
@@ -605,13 +617,13 @@
             ];
 
             if (isAdminLoggedIn) {
-                btnText.innerText = "管理者已登入 (登出)";
-                btn.className = "bg-emerald-700 hover:bg-emerald-600 text-white font-medium text-xs sm:text-sm px-3 py-2 rounded-lg shadow transition flex items-center gap-1.5 border border-emerald-400/40";
+                btnText.innerText = "管理者 (已登入)";
+                btn.className = "bg-emerald-700 hover:bg-emerald-600 text-white font-medium text-xs sm:text-sm px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg shadow transition flex items-center gap-1.5 border border-emerald-400/40";
                 
                 adminOnlyElements.forEach(el => el && el.classList.remove("hidden"));
             } else {
                 btnText.innerText = "管理者登入";
-                btn.className = "bg-indigo-800 hover:bg-indigo-600 text-white font-medium text-xs sm:text-sm px-3 py-2 rounded-lg shadow transition flex items-center gap-1.5 border border-indigo-400/40";
+                btn.className = "bg-indigo-800 hover:bg-indigo-600 text-white font-medium text-xs sm:text-sm px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg shadow transition flex items-center gap-1.5 border border-indigo-400/40";
                 
                 adminOnlyElements.forEach(el => el && el.classList.add("hidden"));
             }
@@ -649,7 +661,7 @@
                 }
             }, (error) => {
                 console.error("Firestore 同步失敗:", error);
-                updateSyncStatus("雲端連線失敗 (使用離線快取)", "fa-solid fa-cloud-slash text-rose-400 text-xs");
+                updateSyncStatus("雲端連線失敗 (離線模式)", "fa-solid fa-cloud-slash text-rose-400 text-xs");
             });
         }
 
@@ -696,7 +708,6 @@
             }
         }
 
-        // 月份拖曳排序事件
         function handleMonthDragStart(e, mKey) {
             if (!isAdminLoggedIn) return;
             draggedMonthKey = mKey;
@@ -763,14 +774,14 @@
                 const isActive = mKey === currentMonth;
                 html += `
                     <div ${isAdminLoggedIn ? `draggable="true" ondragstart="handleMonthDragStart(event, '${mKey}')" ondragover="handleMonthDragOver(event)" ondragenter="handleMonthDragEnter(event)" ondragleave="handleMonthDragLeave(event)" ondrop="handleMonthDrop(event, '${mKey}')" ondragend="handleMonthDragEnd(event)" class="cursor-grab active:cursor-grabbing hover:border-slate-300"` : ''}
-                         class="flex items-center group bg-slate-100/80 rounded-lg p-0.5 border border-slate-200/50 transition-all select-none">
-                        <button onclick="loadMonthData('${mKey}')" class="px-3 py-1.5 rounded-lg font-medium text-xs sm:text-sm whitespace-nowrap transition flex items-center gap-1.5 ${isActive ? 'bg-indigo-600 text-white shadow-sm font-semibold' : 'text-slate-600 hover:bg-slate-200'}">
+                         class="flex items-center group bg-slate-100/80 rounded-lg p-0.5 border border-slate-200/50 transition-all select-none shrink-0">
+                        <button onclick="loadMonthData('${mKey}')" class="px-2.5 sm:px-3 py-1.5 rounded-lg font-medium text-xs sm:text-sm whitespace-nowrap transition flex items-center gap-1 sm:gap-1.5 ${isActive ? 'bg-indigo-600 text-white shadow-sm font-semibold' : 'text-slate-600 hover:bg-slate-200'}">
                             <i class="fa-regular fa-calendar-check text-xs"></i>
                             <span>${mKey}</span>
                         </button>
                         ${isAdminLoggedIn ? `
                             <button onclick="openEditMonthModal('${mKey}')" class="text-slate-400 hover:text-indigo-600 px-1 transition opacity-70 hover:opacity-100" title="修改月份名稱">
-                                <i class="fa-solid fa-pen text-[11px]"></i>
+                                <i class="fa-solid fa-pen text-[10px] sm:text-[11px]"></i>
                             </button>
                             ${Object.keys(monthsData).length > 1 ? `
                                 <button onclick="deleteMonth('${mKey}')" class="text-slate-400 hover:text-rose-500 pr-1 px-0.5 transition opacity-70 hover:opacity-100" title="刪除此月份">
@@ -922,14 +933,14 @@
             if (mode === 'cards') {
                 tableContainer.classList.add("hidden");
                 cardsContainer.classList.remove("hidden");
-                btnViewCards.className = "px-2.5 py-1 text-xs font-medium rounded-md bg-white text-indigo-700 shadow-sm transition";
-                btnViewTable.className = "px-2.5 py-1 text-xs font-medium rounded-md text-slate-600 hover:text-indigo-600 transition";
+                btnViewCards.className = "px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-medium rounded-md bg-white text-indigo-700 shadow-sm transition";
+                btnViewTable.className = "px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-medium rounded-md text-slate-600 hover:text-indigo-600 transition";
                 renderCards();
             } else {
                 cardsContainer.classList.add("hidden");
                 tableContainer.classList.remove("hidden");
-                btnViewTable.className = "px-2.5 py-1 text-xs font-medium rounded-md bg-white text-indigo-700 shadow-sm transition";
-                btnViewCards.className = "px-2.5 py-1 text-xs font-medium rounded-md text-slate-600 hover:text-indigo-600 transition";
+                btnViewTable.className = "px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-medium rounded-md bg-white text-indigo-700 shadow-sm transition";
+                btnViewCards.className = "px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs font-medium rounded-md text-slate-600 hover:text-indigo-600 transition";
                 renderTable();
             }
         }
@@ -1029,22 +1040,22 @@
             const filteredMembers = members.filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
             let headerHTML = `
-                <th class="p-3 w-12 text-center sticky-col-1 bg-slate-100 border-r border-slate-200">#</th>
-                <th class="p-3 w-36 sticky-col-2 bg-slate-100 border-r border-slate-200 shadow-sm">姓名</th>
+                <th class="p-2 sm:p-3 w-10 sm:w-12 text-center sticky-col-1 bg-slate-100 border-r border-slate-200 text-xs">#</th>
+                <th class="p-2 sm:p-3 w-28 sm:w-36 sticky-col-2 bg-slate-100 border-r border-slate-200 shadow-sm text-xs sm:text-sm">姓名</th>
             `;
             columns.forEach(col => {
                 const hasNote = col.note && col.note.trim() !== "";
                 headerHTML += `
-                    <th class="py-2.5 px-2 text-center whitespace-nowrap border-r border-slate-200 group relative">
+                    <th class="py-2 sm:py-2.5 px-2 text-center whitespace-nowrap border-r border-slate-200 group relative">
                         <div class="flex items-center justify-center gap-1">
                             <div class="flex items-center gap-1 truncate cursor-pointer" onclick="openNoteModal('${col.id}')" title="點擊查看項目說明與編輯">
-                                <span class="truncate font-semibold text-slate-800 hover:text-indigo-600 transition">${col.title}</span>
+                                <span class="truncate font-semibold text-slate-800 hover:text-indigo-600 transition text-xs sm:text-sm">${col.title}</span>
                                 ${hasNote ? `<button onclick="event.stopPropagation(); openNoteModal('${col.id}')" class="text-amber-500 hover:text-amber-600 text-xs" title="查看備註說明"><i class="fa-solid fa-circle-info"></i></button>` : ''}
                             </div>
                             ${isAdminLoggedIn ? `
                                 <div class="flex items-center opacity-0 group-hover:opacity-100 transition">
                                     <button onclick="openEditColumnModal('${col.id}')" class="text-slate-400 hover:text-indigo-600 px-0.5" title="編輯項目標題與備註">
-                                        <i class="fa-solid fa-pen text-xs"></i>
+                                        <i class="fa-solid fa-pen text-[10px] sm:text-xs"></i>
                                     </button>
                                     <button onclick="deleteColumn('${col.id}')" class="text-slate-400 hover:text-rose-500 px-0.5" title="刪除此項目欄位">
                                         <i class="fa-solid fa-xmark text-xs"></i>
@@ -1056,14 +1067,14 @@
                 `;
             });
             headerHTML += `
-                <th class="py-2.5 px-3 text-center whitespace-nowrap bg-rose-50 text-rose-800 font-bold border-r border-rose-200">
+                <th class="py-2 sm:py-2.5 px-2 sm:px-3 text-center whitespace-nowrap bg-rose-50 text-rose-800 font-bold border-r border-rose-200 text-xs sm:text-sm">
                     <div class="flex items-center justify-center gap-1">
                         <i class="fa-solid fa-skull-crossbones text-rose-500"></i>
                         <span>【姜宸媽追殺區】</span>
                     </div>
                 </th>
-                <th class="py-2.5 px-3 w-28 text-right sticky-right bg-slate-100 border-l border-slate-200 text-indigo-700 font-bold shadow-sm whitespace-nowrap">應繳金額</th>
-                <th class="py-2.5 px-2 w-12 text-center whitespace-nowrap">操作</th>
+                <th class="py-2 sm:py-2.5 px-2 sm:px-3 w-24 sm:w-28 text-right sticky-right bg-slate-100 border-l border-slate-200 text-indigo-700 font-bold shadow-sm whitespace-nowrap text-xs sm:text-sm">應繳金額</th>
+                <th class="py-2 sm:py-2.5 px-1 sm:px-2 w-10 sm:w-12 text-center whitespace-nowrap text-xs">操作</th>
             `;
             headerRow.innerHTML = headerHTML;
 
@@ -1078,20 +1089,20 @@
 
                 let rowHTML = `
                     <tr class="hover:bg-slate-50/80 transition group ${isCheckedPaid ? 'bg-emerald-50/30' : ''}">
-                        <td class="py-2 px-2 text-center text-slate-400 sticky-col-1 bg-white group-hover:bg-slate-50 border-r border-slate-200 font-mono text-xs">${index + 1}</td>
-                        <td class="py-2 px-3 font-medium text-slate-800 sticky-col-2 bg-white group-hover:bg-slate-50 border-r border-slate-200 shadow-sm whitespace-nowrap">
+                        <td class="py-1.5 sm:py-2 px-1 sm:px-2 text-center text-slate-400 sticky-col-1 bg-white group-hover:bg-slate-50 border-r border-slate-200 font-mono text-[11px] sm:text-xs">${index + 1}</td>
+                        <td class="py-1.5 sm:py-2 px-2 sm:px-3 font-medium text-slate-800 sticky-col-2 bg-white group-hover:bg-slate-50 border-r border-slate-200 shadow-sm whitespace-nowrap">
                             <div class="flex items-center justify-between gap-1">
-                                <div class="flex items-center gap-1.5 truncate">
-                                    ${isCheckedPaid ? `<i class="fa-solid fa-circle-check text-emerald-500 text-sm" title="對帳完成"></i>` : `<i class="fa-regular fa-circle text-slate-300 text-xs"></i>`}
-                                    <span class="truncate ${isAdminLoggedIn ? 'cursor-pointer hover:text-indigo-600' : ''} transition ${isCheckedPaid ? 'font-semibold text-emerald-900' : ''}" onclick="${isAdminLoggedIn ? `openEditMemberModal('${member.id}')` : ''}">${member.name}</span>
+                                <div class="flex items-center gap-1 sm:gap-1.5 truncate">
+                                    ${isCheckedPaid ? `<i class="fa-solid fa-circle-check text-emerald-500 text-xs sm:text-sm" title="對帳完成"></i>` : `<i class="fa-regular fa-circle text-slate-300 text-[10px] sm:text-xs"></i>`}
+                                    <span class="truncate text-xs sm:text-sm ${isAdminLoggedIn ? 'cursor-pointer hover:text-indigo-600' : ''} transition ${isCheckedPaid ? 'font-semibold text-emerald-900' : ''}" onclick="${isAdminLoggedIn ? `openEditMemberModal('${member.id}')` : ''}">${member.name}</span>
                                 </div>
                                 ${isAdminLoggedIn ? `
-                                    <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+                                    <div class="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition shrink-0">
                                         <button onclick="openEditMemberModal('${member.id}')" class="text-slate-400 hover:text-indigo-600 px-0.5" title="編輯姓名">
-                                            <i class="fa-solid fa-pen text-xs"></i>
+                                            <i class="fa-solid fa-pen text-[10px] sm:text-xs"></i>
                                         </button>
                                         <button onclick="deleteMember('${member.id}')" class="text-slate-400 hover:text-rose-500 px-0.5" title="刪除此成員">
-                                            <i class="fa-solid fa-user-minus text-xs"></i>
+                                            <i class="fa-solid fa-user-minus text-[10px] sm:text-xs"></i>
                                         </button>
                                     </div>
                                 ` : ''}
@@ -1105,7 +1116,6 @@
                     memberTotal += numVal;
                     columnTotals[col.id] += numVal;
 
-                    // 金額格呈現：僅有管理者權限才顯示 <input> 可編輯，一般使用者顯示純文字
                     let cellInputHTML = "";
                     if (isAdminLoggedIn) {
                         cellInputHTML = `
@@ -1113,11 +1123,11 @@
                                 value="${val}"
                                 placeholder="0"
                                 onchange="updateMemberValue('${member.id}', '${col.id}', this.value)"
-                                class="w-20 px-1 py-0.5 text-right bg-transparent focus:bg-white focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 rounded border hover:border-slate-300 border-transparent font-mono text-xs sm:text-sm ${numVal < 0 ? 'text-rose-600 font-semibold' : 'text-slate-700'}">
+                                class="w-16 sm:w-20 px-1 py-0.5 text-right bg-transparent focus:bg-white focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 rounded border hover:border-slate-300 border-transparent font-mono text-xs sm:text-sm ${numVal < 0 ? 'text-rose-600 font-semibold' : 'text-slate-700'}">
                         `;
                     } else {
                         cellInputHTML = `
-                            <span class="w-20 inline-block px-1 py-0.5 text-right font-mono text-xs sm:text-sm ${numVal < 0 ? 'text-rose-600 font-semibold' : 'text-slate-700'}">
+                            <span class="w-16 sm:w-20 inline-block px-1 py-0.5 text-right font-mono text-xs sm:text-sm ${numVal < 0 ? 'text-rose-600 font-semibold' : 'text-slate-700'}">
                                 ${val !== "" ? val : '0'}
                             </span>
                         `;
@@ -1129,7 +1139,7 @@
                                 ${cellInputHTML}
                                 ${val !== "" ? `
                                     <button onclick="copyAmount(${val}, '${col.id}')" class="opacity-0 group-hover/cell:opacity-100 transition text-slate-400 hover:text-emerald-600 ml-0.5 px-0.5" title="複製此金額">
-                                        <i class="fa-regular fa-copy text-[11px]"></i>
+                                        <i class="fa-regular fa-copy text-[10px] sm:text-[11px]"></i>
                                     </button>
                                 ` : ''}
                             </div>
@@ -1139,20 +1149,19 @@
 
                 grandTotalSum += memberTotal;
 
-                // 姜宸媽對帳區勾選框：僅管理者可勾選，一般使用者 disable 鎖定
                 rowHTML += `
-                        <td class="py-2 px-3 text-center border-r border-rose-100 bg-rose-50/20">
+                        <td class="py-1.5 sm:py-2 px-2 sm:px-3 text-center border-r border-rose-100 bg-rose-50/20">
                             <input type="checkbox"
                                 ${isCheckedPaid ? 'checked' : ''}
                                 ${isAdminLoggedIn ? '' : 'disabled'}
                                 onchange="toggleMemberPaid('${member.id}', this.checked)"
-                                class="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 ${isAdminLoggedIn ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}"
+                                class="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 ${isAdminLoggedIn ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}"
                                 title="${isAdminLoggedIn ? (isCheckedPaid ? '對帳完成' : '未對帳') : '需管理者權限才能對帳'}">
                         </td>
-                        <td class="py-2 px-3 text-right font-bold text-indigo-700 sticky-right bg-white group-hover:bg-slate-50 border-l border-slate-200 font-mono shadow-sm whitespace-nowrap">
+                        <td class="py-1.5 sm:py-2 px-2 sm:px-3 text-right font-bold text-indigo-700 sticky-right bg-white group-hover:bg-slate-50 border-l border-slate-200 font-mono shadow-sm whitespace-nowrap text-xs sm:text-sm">
                             ${memberTotal.toLocaleString()}
                         </td>
-                        <td class="py-2 px-1 text-center">
+                        <td class="py-1.5 sm:py-2 px-1 text-center">
                             ${isAdminLoggedIn ? `
                                 <button onclick="deleteMember('${member.id}')" class="text-slate-300 hover:text-rose-500 transition px-1 py-0.5" title="刪除隊員">
                                     <i class="fa-solid fa-trash-can text-xs"></i>
@@ -1178,14 +1187,14 @@
 
             let footerHTML = `
                 <tr>
-                    <td class="p-3 sticky-col-1 bg-indigo-50 border-r border-indigo-200"></td>
-                    <td class="p-3 sticky-col-2 bg-indigo-50 border-r border-indigo-200 font-bold text-indigo-900 shadow-sm">合計 (總數)</td>
+                    <td class="p-2 sm:p-3 sticky-col-1 bg-indigo-50 border-r border-indigo-200"></td>
+                    <td class="p-2 sm:p-3 sticky-col-2 bg-indigo-50 border-r border-indigo-200 font-bold text-indigo-900 shadow-sm text-xs sm:text-sm">合計 (總數)</td>
             `;
 
             columns.forEach(col => {
                 const colSum = columnTotals[col.id] || 0;
                 footerHTML += `
-                    <td class="p-3 text-right border-r border-indigo-100 font-mono ${colSum < 0 ? 'text-rose-600' : ''}">
+                    <td class="p-2 sm:p-3 text-right border-r border-indigo-100 font-mono text-xs sm:text-sm ${colSum < 0 ? 'text-rose-600' : ''}">
                         ${colSum.toLocaleString()}
                     </td>
                 `;
@@ -1193,13 +1202,13 @@
 
             const paidCount = members.filter(m => m.isPaid).length;
             footerHTML += `
-                    <td class="p-3 text-center border-r border-rose-200 bg-rose-100/60 font-mono text-xs text-rose-900 font-bold">
+                    <td class="p-2 sm:p-3 text-center border-r border-rose-200 bg-rose-100/60 font-mono text-[11px] sm:text-xs text-rose-900 font-bold">
                         對帳: ${paidCount}/${members.length}
                     </td>
-                    <td class="p-3 text-right sticky-right bg-indigo-50 border-l border-indigo-200 text-indigo-950 font-extrabold text-base font-mono shadow-sm">
+                    <td class="p-2 sm:p-3 text-right sticky-right bg-indigo-50 border-l border-indigo-200 text-indigo-950 font-extrabold text-xs sm:text-base font-mono shadow-sm">
                         ${grandTotalSum.toLocaleString()}
                     </td>
-                    <td class="p-3"></td>
+                    <td class="p-2 sm:p-3"></td>
                 </tr>
             `;
             tfoot.innerHTML = footerHTML;
@@ -1266,40 +1275,40 @@
                 });
 
                 html += `
-                    <div class="bg-white rounded-xl p-4 shadow-sm border ${isCheckedPaid ? 'border-emerald-300 bg-emerald-50/20' : 'border-slate-200'} flex flex-col justify-between hover:border-indigo-300 transition">
+                    <div class="bg-white rounded-xl p-3.5 sm:p-4 shadow-sm border ${isCheckedPaid ? 'border-emerald-300 bg-emerald-50/20' : 'border-slate-200'} flex flex-col justify-between hover:border-indigo-300 transition">
                         <div>
-                            <div class="flex items-center justify-between border-b border-slate-100 pb-2.5 mb-3">
+                            <div class="flex items-center justify-between border-b border-slate-100 pb-2.5 mb-2.5">
                                 <div class="flex items-center gap-2">
-                                    <div class="w-8 h-8 rounded-full ${isCheckedPaid ? 'bg-emerald-100 text-emerald-600' : 'bg-indigo-50 text-indigo-600'} font-bold flex items-center justify-center text-xs">
+                                    <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-full ${isCheckedPaid ? 'bg-emerald-100 text-emerald-600' : 'bg-indigo-50 text-indigo-600'} font-bold flex items-center justify-center text-xs">
                                         ${isCheckedPaid ? '<i class="fa-solid fa-check"></i>' : member.name.substring(0, 1)}
                                     </div>
                                     <div>
                                         <div class="flex items-center gap-1.5">
-                                            <span class="font-bold text-slate-800 text-sm">${member.name}</span>
-                                            ${isCheckedPaid ? `<span class="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-1.5 py-0.5 rounded">對帳完成</span>` : ''}
+                                            <span class="font-bold text-slate-800 text-xs sm:text-sm">${member.name}</span>
+                                            ${isCheckedPaid ? `<span class="bg-emerald-100 text-emerald-800 text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded">對帳完成</span>` : ''}
                                         </div>
                                     </div>
                                 </div>
                                 <div class="text-right">
-                                    <span class="text-[11px] text-slate-400 block">應繳總額</span>
-                                    <strong class="text-sm font-bold font-mono text-indigo-700">NT$ ${memberTotal.toLocaleString()}</strong>
+                                    <span class="text-[10px] sm:text-[11px] text-slate-400 block">應繳總額</span>
+                                    <strong class="text-xs sm:text-sm font-bold font-mono text-indigo-700">NT$ ${memberTotal.toLocaleString()}</strong>
                                 </div>
                             </div>
-                            <div class="text-xs text-slate-500 mb-3 flex items-center justify-between">
-                                <span>已登錄項目: <strong class="text-slate-700">${activeFeeCount}</strong> 項</span>
+                            <div class="text-xs text-slate-500 mb-2.5 flex items-center justify-between">
+                                <span class="text-[11px] sm:text-xs">已登錄項目: <strong class="text-slate-700">${activeFeeCount}</strong> 項</span>
                                 <label class="inline-flex items-center gap-1 ${isAdminLoggedIn ? 'cursor-pointer' : 'cursor-not-allowed'}">
                                     <input type="checkbox" ${isCheckedPaid ? 'checked' : ''} ${isAdminLoggedIn ? '' : 'disabled'} onchange="toggleMemberPaid('${member.id}', this.checked)" class="rounded text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5 ${isAdminLoggedIn ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}">
-                                    <span class="text-[11px] font-semibold text-rose-700">姜宸媽對帳</span>
+                                    <span class="text-[10px] sm:text-[11px] font-semibold text-rose-700">姜宸媽對帳</span>
                                 </label>
                             </div>
                         </div>
                         <div class="flex gap-2 pt-2 border-t border-slate-50">
-                            <button onclick="openMobileEditModal('${member.id}')" class="flex-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium text-xs py-2 rounded-lg transition flex items-center justify-center gap-1">
+                            <button onclick="openMobileEditModal('${member.id}')" class="flex-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium text-xs py-1.5 sm:py-2 rounded-lg transition flex items-center justify-center gap-1">
                                 <i class="fa-solid fa-pen-to-square"></i>
-                                <span>${isAdminLoggedIn ? '編輯費用項目' : '檢視費用明細'}</span>
+                                <span>${isAdminLoggedIn ? '編輯明細' : '檢視明細'}</span>
                             </button>
                             ${isAdminLoggedIn ? `
-                                <button onclick="deleteMember('${member.id}')" class="bg-rose-50 hover:bg-rose-100 text-rose-600 px-3 py-2 rounded-lg text-xs font-medium transition" title="刪除隊員">
+                                <button onclick="deleteMember('${member.id}')" class="bg-rose-50 hover:bg-rose-100 text-rose-600 px-2.5 py-1.5 sm:py-2 rounded-lg text-xs font-medium transition" title="刪除隊員">
                                     <i class="fa-solid fa-trash-can"></i>
                                 </button>
                             ` : ''}
@@ -1314,7 +1323,7 @@
             const member = members.find(m => m.id === memberId);
             if (!member) return;
 
-            document.getElementById("mobileEditModalName").innerText = `${member.name} - 費用明細${isAdminLoggedIn ? '編輯' : '檢視'}`;
+            document.getElementById("mobileEditModalName").innerText = `${member.name} - 明細${isAdminLoggedIn ? '編輯' : '檢視'}`;
            
             let total = 0;
             let html = "";
@@ -1322,14 +1331,14 @@
                 const val = member.values[col.id] !== undefined ? member.values[col.id] : "";
                 total += parseFloat(val) || 0;
                 html += `
-                    <div class="flex items-center justify-between gap-3 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                    <div class="flex items-center justify-between gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200">
                         <label class="text-xs font-medium text-slate-700 truncate flex-1" title="${col.title}">${col.title}</label>
                         <input type="number"
                             value="${val}"
                             placeholder="0"
                             ${isAdminLoggedIn ? '' : 'disabled'}
                             onchange="updateMemberValue('${member.id}', '${col.id}', this.value); updateMobileModalTotal('${member.id}')"
-                            class="w-28 px-2 py-1 text-right bg-white border border-slate-300 rounded-md font-mono text-xs focus:ring-2 focus:ring-indigo-500 ${isAdminLoggedIn ? '' : 'bg-slate-100 text-slate-500 cursor-not-allowed'}">
+                            class="w-24 sm:w-28 px-2 py-1 text-right bg-white border border-slate-300 rounded-md font-mono text-xs focus:ring-2 focus:ring-indigo-500 ${isAdminLoggedIn ? '' : 'bg-slate-100 text-slate-500 cursor-not-allowed'}">
                     </div>
                 `;
             });
