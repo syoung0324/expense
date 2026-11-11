@@ -98,7 +98,7 @@
     <!-- Main Container -->
     <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-col gap-4">
 
-        <!-- Month Navigation Tabs (可直接按住左鍵拖曳排序) -->
+        <!-- Month Navigation Tabs (僅管理者可拖曳與編輯) -->
         <div class="flex items-center justify-between bg-white p-2 sm:p-3 rounded-xl shadow-sm border border-slate-200 overflow-x-auto gap-2">
             <div class="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0" id="monthTabsContainer">
                 <!-- Dynamic Month Tabs -->
@@ -491,7 +491,7 @@
         let copiedAmount = null;
         let pendingWorkbook = null;
         let isAdminLoggedIn = false;
-        let draggedMonthKey = null; // 拖曳排序變數
+        let draggedMonthKey = null;
 
         function updateSyncStatus(text, iconClass) {
             const statusEl = document.getElementById("syncStatusText");
@@ -614,6 +614,10 @@
                 
                 adminOnlyElements.forEach(el => el && el.classList.add("hidden"));
             }
+
+            renderMonthTabs();
+            renderTable();
+            renderCards();
         }
 
         function setupFirestoreListener() {
@@ -671,8 +675,11 @@
             }
         }
 
+        // 核心寫入 Firestore 方法：移除 merge: true，完全覆寫文件以確保被刪除的月份自雲端徹底刪除
         async function saveState() {
-            monthsData[currentMonth] = { columns, members };
+            if (currentMonth && monthsData[currentMonth]) {
+                monthsData[currentMonth] = { columns, members };
+            }
             localStorage.setItem("team_expense_months_data", JSON.stringify(monthsData));
             localStorage.setItem("team_expense_current_month", currentMonth);
 
@@ -681,7 +688,7 @@
                 await setDoc(dataDocRef, { 
                     monthsData, 
                     updatedAt: new Date().toISOString() 
-                }, { merge: true });
+                });
                 updateSyncStatus("已即時同步至雲端", "fa-solid fa-cloud-check text-emerald-400 text-xs");
             } catch (e) {
                 console.error("Save to Firestore Error:", e);
@@ -689,8 +696,9 @@
             }
         }
 
-        // 月份欄位 Drag and Drop 拖曳排序事件處理
+        // 月份欄位 Drag and Drop 拖曳排序處理（僅管理者權限啟用）
         function handleMonthDragStart(e, mKey) {
+            if (!isAdminLoggedIn) return;
             draggedMonthKey = mKey;
             e.dataTransfer.effectAllowed = "move";
             e.dataTransfer.setData("text/plain", mKey);
@@ -698,20 +706,24 @@
         }
 
         function handleMonthDragOver(e) {
+            if (!isAdminLoggedIn) return;
             e.preventDefault();
             e.dataTransfer.dropEffect = "move";
         }
 
         function handleMonthDragEnter(e) {
+            if (!isAdminLoggedIn) return;
             e.preventDefault();
             e.currentTarget.classList.add("border-indigo-500", "ring-2", "ring-indigo-400", "bg-indigo-50");
         }
 
         function handleMonthDragLeave(e) {
+            if (!isAdminLoggedIn) return;
             e.currentTarget.classList.remove("border-indigo-500", "ring-2", "ring-indigo-400", "bg-indigo-50");
         }
 
         function handleMonthDrop(e, targetKey) {
+            if (!isAdminLoggedIn) return;
             e.preventDefault();
             e.stopPropagation();
             e.currentTarget.classList.remove("border-indigo-500", "ring-2", "ring-indigo-400", "bg-indigo-50");
@@ -739,6 +751,7 @@
         }
 
         function handleMonthDragEnd(e) {
+            if (!isAdminLoggedIn) return;
             e.currentTarget.classList.remove("opacity-40", "scale-95");
             draggedMonthKey = null;
         }
@@ -749,25 +762,21 @@
             Object.keys(monthsData).forEach(mKey => {
                 const isActive = mKey === currentMonth;
                 html += `
-                    <div draggable="true"
-                         ondragstart="handleMonthDragStart(event, '${mKey}')"
-                         ondragover="handleMonthDragOver(event)"
-                         ondragenter="handleMonthDragEnter(event)"
-                         ondragleave="handleMonthDragLeave(event)"
-                         ondrop="handleMonthDrop(event, '${mKey}')"
-                         ondragend="handleMonthDragEnd(event)"
-                         class="flex items-center group bg-slate-100/80 rounded-lg p-0.5 border border-slate-200/50 cursor-grab active:cursor-grabbing transition-all select-none hover:border-slate-300">
+                    <div ${isAdminLoggedIn ? `draggable="true" ondragstart="handleMonthDragStart(event, '${mKey}')" ondragover="handleMonthDragOver(event)" ondragenter="handleMonthDragEnter(event)" ondragleave="handleMonthDragLeave(event)" ondrop="handleMonthDrop(event, '${mKey}')" ondragend="handleMonthDragEnd(event)" class="cursor-grab active:cursor-grabbing hover:border-slate-300"` : ''}
+                         class="flex items-center group bg-slate-100/80 rounded-lg p-0.5 border border-slate-200/50 transition-all select-none">
                         <button onclick="loadMonthData('${mKey}')" class="px-3 py-1.5 rounded-lg font-medium text-xs sm:text-sm whitespace-nowrap transition flex items-center gap-1.5 ${isActive ? 'bg-indigo-600 text-white shadow-sm font-semibold' : 'text-slate-600 hover:bg-slate-200'}">
                             <i class="fa-regular fa-calendar-check text-xs"></i>
                             <span>${mKey}</span>
                         </button>
-                        <button onclick="openEditMonthModal('${mKey}')" class="text-slate-400 hover:text-indigo-600 px-1 transition opacity-70 hover:opacity-100" title="修改月份名稱">
-                            <i class="fa-solid fa-pen text-[11px]"></i>
-                        </button>
-                        ${Object.keys(monthsData).length > 1 ? `
-                            <button onclick="deleteMonth('${mKey}')" class="text-slate-400 hover:text-rose-500 pr-1 px-0.5 transition opacity-70 hover:opacity-100" title="刪除此月份">
-                                <i class="fa-solid fa-xmark text-xs"></i>
+                        ${isAdminLoggedIn ? `
+                            <button onclick="openEditMonthModal('${mKey}')" class="text-slate-400 hover:text-indigo-600 px-1 transition opacity-70 hover:opacity-100" title="修改月份名稱">
+                                <i class="fa-solid fa-pen text-[11px]"></i>
                             </button>
+                            ${Object.keys(monthsData).length > 1 ? `
+                                <button onclick="deleteMonth('${mKey}')" class="text-slate-400 hover:text-rose-500 pr-1 px-0.5 transition opacity-70 hover:opacity-100" title="刪除此月份">
+                                    <i class="fa-solid fa-xmark text-xs"></i>
+                                </button>
+                            ` : ''}
                         ` : ''}
                     </div>
                 `;
@@ -776,6 +785,10 @@
         }
 
         function openEditMonthModal(mKey) {
+            if (!isAdminLoggedIn) {
+                alert("需有管理者權限才能編輯月份！");
+                return;
+            }
             document.getElementById("oldMonthNameInput").value = mKey;
             document.getElementById("newMonthNameInput").value = mKey;
             document.getElementById("editMonthModal").classList.remove("hidden");
@@ -787,6 +800,7 @@
         }
 
         function saveEditedMonthName() {
+            if (!isAdminLoggedIn) return;
             const oldKey = document.getElementById("oldMonthNameInput").value;
             const newKey = document.getElementById("newMonthNameInput").value.trim();
 
@@ -815,6 +829,7 @@
         }
 
         function openAddMonthModal() {
+            if (!isAdminLoggedIn) return;
             document.getElementById("monthNameInput").value = "";
             
             const container = document.getElementById("monthColumnCheckboxes");
@@ -848,6 +863,7 @@
         }
 
         function saveNewMonth() {
+            if (!isAdminLoggedIn) return;
             const monthName = document.getElementById("monthNameInput").value.trim();
             const copyRoster = document.getElementById("copyRosterCheck").checked;
 
@@ -883,6 +899,10 @@
         }
 
         function deleteMonth(mKey) {
+            if (!isAdminLoggedIn) {
+                alert("需有管理者權限才能刪除月份！");
+                return;
+            }
             if (Object.keys(monthsData).length <= 1) {
                 alert("至少需要保留一個月份！");
                 return;
@@ -892,8 +912,8 @@
                 if (currentMonth === mKey) {
                     currentMonth = Object.keys(monthsData)[0];
                 }
-                loadMonthData(currentMonth);
                 saveState();
+                loadMonthData(currentMonth, false);
                 showToast(`已成功刪除「${mKey}」！`);
             }
         }
@@ -1022,14 +1042,16 @@
                                 <span class="truncate font-semibold text-slate-800 hover:text-indigo-600 transition">${col.title}</span>
                                 ${hasNote ? `<button onclick="event.stopPropagation(); openNoteModal('${col.id}')" class="text-amber-500 hover:text-amber-600 text-xs" title="查看備註說明"><i class="fa-solid fa-circle-info"></i></button>` : ''}
                             </div>
-                            <div class="flex items-center opacity-0 group-hover:opacity-100 transition">
-                                <button onclick="openEditColumnModal('${col.id}')" class="text-slate-400 hover:text-indigo-600 px-0.5" title="編輯項目標題與備註">
-                                    <i class="fa-solid fa-pen text-xs"></i>
-                                </button>
-                                <button onclick="deleteColumn('${col.id}')" class="text-slate-400 hover:text-rose-500 px-0.5" title="刪除此項目欄位">
-                                    <i class="fa-solid fa-xmark text-xs"></i>
-                                </button>
-                            </div>
+                            ${isAdminLoggedIn ? `
+                                <div class="flex items-center opacity-0 group-hover:opacity-100 transition">
+                                    <button onclick="openEditColumnModal('${col.id}')" class="text-slate-400 hover:text-indigo-600 px-0.5" title="編輯項目標題與備註">
+                                        <i class="fa-solid fa-pen text-xs"></i>
+                                    </button>
+                                    <button onclick="deleteColumn('${col.id}')" class="text-slate-400 hover:text-rose-500 px-0.5" title="刪除此項目欄位">
+                                        <i class="fa-solid fa-xmark text-xs"></i>
+                                    </button>
+                                </div>
+                            ` : ''}
                         </div>
                     </th>
                 `;
@@ -1062,16 +1084,18 @@
                             <div class="flex items-center justify-between gap-1">
                                 <div class="flex items-center gap-1.5 truncate">
                                     ${isCheckedPaid ? `<i class="fa-solid fa-circle-check text-emerald-500 text-sm" title="對帳完成"></i>` : `<i class="fa-regular fa-circle text-slate-300 text-xs"></i>`}
-                                    <span class="truncate cursor-pointer hover:text-indigo-600 transition ${isCheckedPaid ? 'font-semibold text-emerald-900' : ''}" onclick="openEditMemberModal('${member.id}')">${member.name}</span>
+                                    <span class="truncate cursor-pointer hover:text-indigo-600 transition ${isCheckedPaid ? 'font-semibold text-emerald-900' : ''}" onclick="${isAdminLoggedIn ? `openEditMemberModal('${member.id}')` : ''}">${member.name}</span>
                                 </div>
-                                <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
-                                    <button onclick="openEditMemberModal('${member.id}')" class="text-slate-400 hover:text-indigo-600 px-0.5" title="編輯姓名">
-                                        <i class="fa-solid fa-pen text-xs"></i>
-                                    </button>
-                                    <button onclick="deleteMember('${member.id}')" class="text-slate-400 hover:text-rose-500 px-0.5" title="刪除此成員">
-                                        <i class="fa-solid fa-user-minus text-xs"></i>
-                                    </button>
-                                </div>
+                                ${isAdminLoggedIn ? `
+                                    <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+                                        <button onclick="openEditMemberModal('${member.id}')" class="text-slate-400 hover:text-indigo-600 px-0.5" title="編輯姓名">
+                                            <i class="fa-solid fa-pen text-xs"></i>
+                                        </button>
+                                        <button onclick="deleteMember('${member.id}')" class="text-slate-400 hover:text-rose-500 px-0.5" title="刪除此成員">
+                                            <i class="fa-solid fa-user-minus text-xs"></i>
+                                        </button>
+                                    </div>
+                                ` : ''}
                             </div>
                         </td>
                 `;
@@ -1114,9 +1138,11 @@
                             ${memberTotal.toLocaleString()}
                         </td>
                         <td class="py-2 px-1 text-center">
-                            <button onclick="deleteMember('${member.id}')" class="text-slate-300 hover:text-rose-500 transition px-1 py-0.5" title="刪除隊員">
-                                <i class="fa-solid fa-trash-can text-xs"></i>
-                            </button>
+                            ${isAdminLoggedIn ? `
+                                <button onclick="deleteMember('${member.id}')" class="text-slate-300 hover:text-rose-500 transition px-1 py-0.5" title="刪除隊員">
+                                    <i class="fa-solid fa-trash-can text-xs"></i>
+                                </button>
+                            ` : `<span class="text-slate-300">-</span>`}
                         </td>
                     </tr>
                 `;
@@ -1246,9 +1272,11 @@
                                 <i class="fa-solid fa-pen-to-square"></i>
                                 <span>編輯費用項目</span>
                             </button>
-                            <button onclick="deleteMember('${member.id}')" class="bg-rose-50 hover:bg-rose-100 text-rose-600 px-3 py-2 rounded-lg text-xs font-medium transition" title="刪除隊員">
-                                <i class="fa-solid fa-trash-can"></i>
-                            </button>
+                            ${isAdminLoggedIn ? `
+                                <button onclick="deleteMember('${member.id}')" class="bg-rose-50 hover:bg-rose-100 text-rose-600 px-3 py-2 rounded-lg text-xs font-medium transition" title="刪除隊員">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                            ` : ''}
                         </div>
                     </div>
                 `;
@@ -1301,6 +1329,7 @@
         }
 
         function openAddMemberModal() {
+            if (!isAdminLoggedIn) return;
             document.getElementById("memberModalTitle").innerText = "新增成員";
             document.getElementById("editMemberId").value = "";
             document.getElementById("memberNameInput").value = "";
@@ -1310,6 +1339,7 @@
         }
 
         function openEditMemberModal(id) {
+            if (!isAdminLoggedIn) return;
             const m = members.find(item => item.id === id);
             if (!m) return;
             document.getElementById("memberModalTitle").innerText = "修改隊員姓名";
@@ -1325,6 +1355,7 @@
         }
 
         function deleteMemberFromModal() {
+            if (!isAdminLoggedIn) return;
             const editId = document.getElementById("editMemberId").value;
             if (editId) {
                 deleteMember(editId);
@@ -1333,6 +1364,7 @@
         }
 
         function saveMember() {
+            if (!isAdminLoggedIn) return;
             const nameInput = document.getElementById("memberNameInput").value.trim();
             const editId = document.getElementById("editMemberId").value;
             if (!nameInput) {
@@ -1363,6 +1395,7 @@
         }
 
         function deleteMember(id) {
+            if (!isAdminLoggedIn) return;
             const m = members.find(item => item.id === id);
             if (m && confirm(`確定要刪除隊員 "${m.name}" 嗎？刪除後不可恢復。`)) {
                 members = members.filter(item => item.id !== id);
@@ -1374,6 +1407,7 @@
         }
 
         function openAddColumnModal() {
+            if (!isAdminLoggedIn) return;
             document.getElementById("columnModalTitle").innerText = "新增費用支出項目 (欄位)";
             document.getElementById("editColumnId").value = "";
             document.getElementById("columnTitleInput").value = "";
@@ -1383,6 +1417,7 @@
         }
 
         function openEditColumnModal(colId) {
+            if (!isAdminLoggedIn) return;
             const col = columns.find(c => c.id === colId);
             if (!col) return;
             document.getElementById("columnModalTitle").innerText = "修改費用項目名稱與備註";
@@ -1398,6 +1433,7 @@
         }
 
         function saveColumn() {
+            if (!isAdminLoggedIn) return;
             const titleInput = document.getElementById("columnTitleInput").value.trim();
             const noteInput = document.getElementById("columnNoteInput").value.trim();
             const editId = document.getElementById("editColumnId").value;
@@ -1442,6 +1478,7 @@
         }
 
         function deleteColumn(colId) {
+            if (!isAdminLoggedIn) return;
             const col = columns.find(c => c.id === colId);
             if (col && confirm(`確定要刪除欄位 "${col.title}" 嗎？這將會清空全體成員在該項目的金額。`)) {
                 columns = columns.filter(c => c.id !== colId);
@@ -1456,10 +1493,12 @@
         }
 
         function triggerExcelImport() {
+            if (!isAdminLoggedIn) return;
             document.getElementById("excelFileInput").click();
         }
 
         function handleExcelImport(event) {
+            if (!isAdminLoggedIn) return;
             const file = event.target.files[0];
             if (!file) return;
 
@@ -1516,7 +1555,7 @@
         }
 
         function confirmImportSelectedSheet() {
-            if (!pendingWorkbook) return;
+            if (!isAdminLoggedIn || !pendingWorkbook) return;
 
             const radios = document.querySelectorAll('input[name="selectedExcelSheet"]:checked');
             if (radios.length === 0) {
@@ -1538,10 +1577,11 @@
         }
 
         function processImportData(jsonData, sheetName) {
+            if (!isAdminLoggedIn) return;
             const replaceRosterChoice = confirm(`您選擇匯入「${sheetName}」工作表。\n\n請問要如何處理資料？\n\n【確定】: 完全替換「${currentMonth}」的隊員名單與數據（刪除原有舊隊員）\n【取消】: 保留舊隊員，僅合併/更新數據`);
 
             if (replaceRosterChoice) {
-                members = []; // 清空舊隊員名單
+                members = [];
             }
 
             const headerRow = jsonData[0];
@@ -1626,6 +1666,7 @@
         }
 
         function exportToExcel() {
+            if (!isAdminLoggedIn) return;
             if (typeof XLSX === 'undefined') {
                 alert("Excel 匯出模組載入失敗，請檢查網路連線。");
                 return;
