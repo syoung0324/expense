@@ -1,2414 +1,1758 @@
 <!DOCTYPE html>
-
 <html lang="zh-TW">
-
 <head>
-
     <meta charset="UTF-8">
-
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
     <title>團隊費用統計與管理系統</title>
-
     <!-- Tailwind CSS CDN -->
-
     <script src="https://cdn.tailwindcss.com"></script>
-
     <!-- Font Awesome for Icons -->
-
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-
     <!-- SheetJS (xlsx) for Excel Export & Import -->
-
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-
     <!-- Inter Font -->
-
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-
     <style>
-
         body {
-
             font-family: 'Inter', sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial;
-
         }
-
         ::-webkit-scrollbar {
-
             width: 10px;
-
             height: 12px;
-
         }
-
         ::-webkit-scrollbar-track {
-
             background: #f1f5f9;
-
             border-radius: 6px;
-
         }
-
         ::-webkit-scrollbar-thumb {
-
             background: #94a3b8;
-
             border-radius: 6px;
-
             border: 2px solid #f1f5f9;
-
         }
-
         ::-webkit-scrollbar-thumb:hover {
-
             background: #64748b;
-
         }
-
         .sticky-col-1 {
-
             position: sticky;
-
             left: 0;
-
             z-index: 10;
-
         }
-
         .sticky-col-2 {
-
             position: sticky;
-
             left: 50px;
-
             z-index: 10;
-
         }
-
         .sticky-right {
-
             position: sticky;
-
             right: 0;
-
             z-index: 10;
-
         }
-
     </style>
-
 </head>
-
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col">
 
-
     <!-- Header / Navigation -->
-
     <header class="bg-indigo-700 text-white shadow-md">
-
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
-
             <div class="flex items-center space-x-3">
-
                 <div class="p-2 bg-indigo-600 rounded-lg shadow-inner">
-
                     <i class="fa-solid fa-receipt text-2xl text-amber-300"></i>
-
                 </div>
-
                 <div>
-
-                    <h1 class="text-xl font-bold tracking-tight">團隊與球隊費用統計管理系統</h1>
-
-                    <p class="text-xs text-indigo-200">分月支出明細、批次複製與手機版體驗優化</p>
-
+                    <div class="flex items-center gap-2">
+                        <h1 class="text-xl font-bold tracking-tight">團隊與球隊費用統計管理系統</h1>
+                        <!-- Firestore 雲端同步狀態標籤 -->
+                        <div id="syncStatusBadge" class="flex items-center gap-1.5 bg-indigo-800/90 text-emerald-300 text-[11px] px-2.5 py-0.5 rounded-full border border-indigo-500/50 shadow-inner">
+                            <i id="syncStatusIcon" class="fa-solid fa-cloud-arrow-up text-xs"></i>
+                            <span id="syncStatusText">連線中...</span>
+                        </div>
+                    </div>
+                    <p class="text-xs text-indigo-200">分月支出明細、自選複製項目、Excel多分頁匯入與 Firestore 雲端同步</p>
                 </div>
-
             </div>
-
            
-
             <div class="flex flex-wrap items-center gap-2">
+                <!-- 管理者登入按鈕 (附帶 🦩 紅鶴圖示) -->
+                <button id="btnAdminLogin" onclick="handleAdminBtnClick()" class="bg-indigo-800 hover:bg-indigo-600 text-white font-medium text-xs sm:text-sm px-3 py-2 rounded-lg shadow transition flex items-center gap-1.5 border border-indigo-400/40">
+                    <span class="text-base">🦩</span>
+                    <span id="adminBtnText">管理者登入</span>
+                </button>
 
                 <!-- File Input (Hidden) -->
-
                 <input type="file" id="excelFileInput" accept=".xlsx, .xls" class="hidden" onchange="handleExcelImport(event)">
-
                
-
-                <button id="btnImportExcel" onclick="triggerExcelImport()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs sm:text-sm px-3 py-2 rounded-lg shadow transition flex items-center gap-1.5">
-
+                <!-- 僅管理者登入後顯示：匯入 Excel & 匯出 Excel -->
+                <button id="btnImportExcel" onclick="triggerExcelImport()" class="hidden bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs sm:text-sm px-3 py-2 rounded-lg shadow transition flex items-center gap-1.5">
                     <i class="fa-solid fa-file-import text-base"></i>
-
                     <span>匯入 Excel</span>
-
                 </button>
 
-
-                <button id="btnExportExcel" onclick="exportToExcel()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs sm:text-sm px-3 py-2 rounded-lg shadow transition flex items-center gap-1.5">
-
+                <button id="btnExportExcel" onclick="exportToExcel()" class="hidden bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs sm:text-sm px-3 py-2 rounded-lg shadow transition flex items-center gap-1.5">
                     <i class="fa-solid fa-file-excel text-base"></i>
-
                     <span>匯出 Excel</span>
-
                 </button>
-
             </div>
-
         </div>
-
     </header>
 
-
     <!-- Main Container -->
-
     <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-col gap-4">
 
-
-        <!-- Month Navigation Tabs -->
-
+        <!-- Month Navigation Tabs (可直接按住左鍵拖曳排序) -->
         <div class="flex items-center justify-between bg-white p-2 sm:p-3 rounded-xl shadow-sm border border-slate-200 overflow-x-auto gap-2">
-
             <div class="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0" id="monthTabsContainer">
-
                 <!-- Dynamic Month Tabs -->
-
             </div>
-
-            <button id="btnAddMonthBtn" onclick="openAddMonthModal()" class="shrink-0 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium text-xs sm:text-sm px-3 py-1.5 rounded-lg border border-indigo-200 transition flex items-center gap-1">
-
+            <!-- 僅管理者登入後顯示：新增月份 -->
+            <button id="btnAddMonthBtn" onclick="openAddMonthModal()" class="hidden shrink-0 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium text-xs sm:text-sm px-3 py-1.5 rounded-lg border border-indigo-200 transition flex items-center gap-1">
                 <i class="fa-solid fa-plus text-xs"></i>
-
                 <span>新增月份</span>
-
             </button>
-
         </div>
-
 
         <!-- Control Panel / Management Actions -->
-
         <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-
             <!-- Search Member -->
-
             <div class="md:col-span-3 relative">
-
                 <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
-
                 <input type="text" id="searchInput" oninput="handleSearch()" placeholder="搜尋隊員姓名..." class="w-full pl-9 pr-4 py-2 text-sm bg-slate-50 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition">
-
             </div>
-
 
             <!-- Copied Amount Status Chip & Quick Paste -->
-
             <div class="md:col-span-3 flex items-center justify-center sm:justify-start gap-2">
-
                 <div id="copiedBadge" class="hidden bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs px-3 py-1.5 rounded-lg flex items-center gap-2 shadow-sm">
-
                     <i class="fa-solid fa-clipboard-check text-emerald-600"></i>
-
                     <span>已複製: <strong id="copiedAmountText" class="font-mono font-bold text-emerald-700">0</strong></span>
-
                     <button onclick="openBatchPasteModal()" class="ml-1 bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-medium px-2 py-0.5 rounded shadow transition flex items-center gap-1">
-
                         <i class="fa-solid fa-paste"></i>
-
                         <span>批次貼上</span>
-
                     </button>
-
                     <button onclick="clearCopiedAmount()" class="text-slate-400 hover:text-rose-500 text-xs" title="清除複製"><i class="fa-solid fa-xmark"></i></button>
-
                 </div>
-
             </div>
-
 
             <!-- Summary Chips -->
-
             <div class="md:col-span-3 flex items-center justify-center gap-2 text-xs sm:text-sm">
-
                 <div class="bg-indigo-50 border border-indigo-100 rounded-lg px-2.5 py-1.5 text-indigo-800 flex items-center gap-1.5">
-
                     <span class="text-slate-500">總人數:</span>
-
                     <strong id="statMemberCount" class="text-sm sm:text-base font-bold text-indigo-600">0</strong>
-
                 </div>
-
                 <div class="bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-1.5 text-amber-900 flex items-center gap-1.5">
-
                     <span class="text-slate-500">應收總額:</span>
-
                     <strong id="statGrandTotal" class="text-sm sm:text-base font-bold text-amber-700">NT$ 0</strong>
-
                 </div>
-
             </div>
-
 
             <!-- View Mode Toggle & Action Buttons -->
-
             <div class="md:col-span-3 flex flex-wrap items-center justify-end gap-2">
-
                 <div class="bg-slate-100 p-1 rounded-lg flex items-center border border-slate-200">
-
                     <button id="btnViewTable" onclick="switchViewMode('table')" class="px-2.5 py-1 text-xs font-medium rounded-md bg-white text-indigo-700 shadow-sm transition">表格檢視</button>
-
                     <button id="btnViewCards" onclick="switchViewMode('cards')" class="px-2.5 py-1 text-xs font-medium rounded-md text-slate-600 hover:text-indigo-600 transition">卡片檢視</button>
-
                 </div>
-
-                <button id="btnAddMemberBtn" onclick="openAddMemberModal()" class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium text-xs sm:text-sm px-2.5 py-1.5 rounded-lg border border-indigo-200 transition flex items-center gap-1">
-
+                <!-- 僅管理者登入後顯示：新增隊員 & 新增項目 -->
+                <button id="btnAddMemberBtn" onclick="openAddMemberModal()" class="hidden bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium text-xs sm:text-sm px-2.5 py-1.5 rounded-lg border border-indigo-200 transition flex items-center gap-1">
                     <i class="fa-solid fa-user-plus text-xs"></i>
-
                     <span>新增隊員</span>
-
                 </button>
-
-                <button id="btnAddColumnBtn" onclick="openAddColumnModal()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs sm:text-sm px-2.5 py-1.5 rounded-lg border border-slate-300 transition flex items-center gap-1">
-
+                <button id="btnAddColumnBtn" onclick="openAddColumnModal()" class="hidden bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium text-xs sm:text-sm px-2.5 py-1.5 rounded-lg border border-slate-300 transition flex items-center gap-1">
                     <i class="fa-solid fa-folder-plus text-xs"></i>
-
                     <span>新增項目</span>
-
                 </button>
-
             </div>
-
         </div>
-
 
         <!-- Desktop / Scrollable Table View -->
-
         <div id="tableViewContainer" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex-1 flex flex-col">
-
             <div class="overflow-x-auto flex-1 relative max-h-[calc(100vh-310px)] min-h-[400px] border-b border-slate-200 pb-2">
-
                 <table id="expenseTable" class="min-w-max text-left border-collapse text-xs sm:text-sm">
-
                     <thead>
-
                         <tr class="bg-slate-100 text-slate-700 border-b border-slate-200 sticky top-0 z-20 font-semibold select-none" id="tableHeaderRow">
-
                             <!-- Dynamic Header Generated JS -->
-
                         </tr>
-
                     </thead>
-
                     <tbody id="tableBody" class="divide-y divide-slate-100">
-
                         <!-- Dynamic Rows Generated JS -->
-
                     </tbody>
-
                     <tfoot id="tableFooter" class="bg-indigo-50/90 text-indigo-950 font-bold sticky bottom-0 z-20 border-t-2 border-indigo-200">
-
                         <!-- Dynamic Column Totals Generated JS -->
-
                     </tfoot>
-
                 </table>
-
             </div>
-
         </div>
-
 
         <!-- Mobile Card View (Optimized for Small Screens) -->
-
         <div id="cardsViewContainer" class="hidden grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-
             <!-- Dynamic Member Cards JS -->
-
         </div>
-
 
     </main>
 
+    <!-- Modal: Admin Login (管理者登入視窗) -->
+    <div id="adminModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 border border-slate-100">
+            <div class="flex items-center gap-2 mb-4 text-indigo-700">
+                <span class="text-2xl">🦩</span>
+                <h3 class="text-lg font-bold text-slate-800">管理者身分登入</h3>
+            </div>
+            <div class="mb-4">
+                <label class="block text-xs font-semibold text-slate-600 mb-1" for="adminPasswordInput">管理者密碼</label>
+                <input type="password" id="adminPasswordInput" placeholder="請輸入管理者密碼" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" onkeydown="if(event.key==='Enter') checkAdminPassword()">
+            </div>
+            <div class="flex justify-end gap-2">
+                <button type="button" onclick="closeAdminModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs sm:text-sm font-medium">取消</button>
+                <button type="button" onclick="checkAdminPassword()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs sm:text-sm font-medium">登入</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Modal: Add New Month -->
-
     <div id="monthModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-
-        <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 border border-slate-100">
-
+        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-slate-100 max-h-[85vh] flex flex-col">
             <h3 class="text-lg font-bold text-slate-800 mb-3">新增月份帳目</h3>
-
-            <div class="mb-4">
-
+            
+            <div class="mb-3">
                 <label class="block text-xs font-semibold text-slate-600 mb-1" for="monthNameInput">月份名稱</label>
-
                 <input type="text" id="monthNameInput" placeholder="例如: 2026年12月" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-
             </div>
-
-            <div class="mb-4">
-
-                <label class="inline-flex items-center text-xs text-slate-600 cursor-pointer">
-
+            
+            <div class="mb-3">
+                <label class="inline-flex items-center text-xs text-slate-700 font-semibold cursor-pointer">
                     <input type="checkbox" id="copyRosterCheck" checked class="rounded text-indigo-600 focus:ring-indigo-500 mr-2">
-
                     <span>自動複製當前月份的隊員名單</span>
-
                 </label>
-
             </div>
 
-            <div class="flex justify-end gap-2">
-
-                <button type="button" onclick="closeMonthModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs sm:text-sm font-medium">取消</button>
-
-                <button type="button" onclick="saveNewMonth()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs sm:text-sm font-medium">建立月份</button>
-
-            </div>
-
-        </div>
-
-    </div>
-
-
-    <!-- Modal: Add / Edit Member -->
-
-    <div id="memberModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-
-        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-slate-100">
-
-            <h3 class="text-lg font-bold text-slate-800 mb-4" id="memberModalTitle">新增成員</h3>
-
-            <input type="hidden" id="editMemberId">
-
-            <div class="mb-4">
-
-                <label class="block text-xs font-semibold text-slate-600 mb-1" for="memberNameInput">成員姓名</label>
-
-                <input type="text" id="memberNameInput" placeholder="請輸入姓名" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-
-            </div>
-
-            <div class="flex justify-between items-center">
-
-                <button type="button" id="btnDeleteMemberInModal" onclick="deleteMemberFromModal()" class="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg text-xs sm:text-sm font-medium transition hidden flex items-center gap-1.5">
-
-                    <i class="fa-solid fa-trash-can"></i>
-
-                    <span>刪除此成員</span>
-
-                </button>
-
-                <div class="flex gap-2 ml-auto">
-
-                    <button type="button" onclick="closeMemberModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs sm:text-sm font-medium">取消</button>
-
-                    <button type="button" onclick="saveMember()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs sm:text-sm font-medium">儲存</button>
-
+            <!-- 選擇欲複製的費用項目 -->
+            <div class="flex-1 overflow-hidden flex flex-col mb-4 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                <div class="flex items-center justify-between mb-2 pb-1 border-b border-slate-200">
+                    <span class="text-xs font-bold text-slate-700">選擇欲帶入新月份的費用項目：</span>
+                    <button type="button" onclick="toggleSelectAllMonthCols()" class="text-xs text-indigo-600 hover:underline font-medium">全選 / 全取消</button>
                 </div>
-
+                <div class="flex-1 overflow-y-auto space-y-1.5 pr-1" id="monthColumnCheckboxes">
+                    <!-- Dynamic Checkboxes -->
+                </div>
             </div>
-
-        </div>
-
-    </div>
-
-
-    <!-- Modal: Add / Edit Column -->
-
-    <div id="columnModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-
-        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-slate-100">
-
-            <h3 class="text-lg font-bold text-slate-800 mb-4" id="columnModalTitle">新增費用支出項目 (欄位)</h3>
-
-            <input type="hidden" id="editColumnId">
-
-            <div class="mb-4">
-
-                <label class="block text-xs font-semibold text-slate-600 mb-1" for="columnTitleInput">費用項目名稱</label>
-
-                <input type="text" id="columnTitleInput" placeholder="例如: 12月隊費、教練費、裝備費" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-
-            </div>
-
-            <div class="mb-4">
-
-                <label class="block text-xs font-semibold text-slate-600 mb-1" for="columnNoteInput">費用項目備註說明 (選填)</label>
-
-                <textarea id="columnNoteInput" rows="3" placeholder="例如：住宿包含兩晚房費、此項目含隊服與球號訂製..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
-
-                <p class="text-[11px] text-slate-400 mt-1">填寫備註後，標題旁邊將會顯示說明圖示，點擊可檢視詳細說明。</p>
-
-            </div>
-
-            <div class="flex justify-end gap-2">
-
-                <button onclick="closeColumnModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs sm:text-sm font-medium">取消</button>
-
-                <button onclick="saveColumn()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs sm:text-sm font-medium">儲存</button>
-
-            </div>
-
-        </div>
-
-    </div>
-
-
-    <!-- Modal: Mobile Member Fee Edit Modal -->
-
-    <div id="mobileEditModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-
-        <div class="bg-white rounded-xl shadow-xl max-w-lg w-full p-5 border border-slate-100 max-h-[90vh] flex flex-col">
-
-            <div class="flex items-center justify-between border-b pb-3 mb-3">
-
-                <h3 class="text-base font-bold text-slate-800" id="mobileEditModalName">隊員費用編輯</h3>
-
-                <span id="mobileEditModalTotal" class="text-sm font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-md">應繳: NT$ 0</span>
-
-            </div>
-
-            <div class="flex-1 overflow-y-auto space-y-3 pr-1" id="mobileEditFormBody">
-
-                <!-- Dynamic Fee Inputs -->
-
-            </div>
-
-            <div class="flex justify-end pt-3 mt-2 border-t">
-
-                <button onclick="closeMobileEditModal()" class="w-full sm:w-auto px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs sm:text-sm font-medium">完成並關閉</button>
-
-            </div>
-
-        </div>
-
-    </div>
-
-
-    <!-- Modal: Column Note View Modal -->
-
-    <div id="noteModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-
-        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-slate-100">
-
-            <div class="flex items-center gap-2 mb-3 text-indigo-700">
-
-                <i class="fa-solid fa-circle-info text-xl text-amber-500"></i>
-
-                <h3 class="text-lg font-bold text-slate-800" id="noteModalTitle">項目說明</h3>
-
-            </div>
-
-            <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm text-slate-700 whitespace-pre-line min-h-[80px]" id="noteModalContent">
-
-                <!-- Dynamic Content -->
-
-            </div>
-
-            <div class="flex justify-end mt-4">
-
-                <button onclick="closeNoteModal()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs sm:text-sm font-medium">關閉</button>
-
-            </div>
-
-        </div>
-
-    </div>
-
-
-    <!-- Modal: Batch Paste Modal -->
-
-    <div id="batchPasteModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-
-        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-slate-100 flex flex-col max-h-[85vh]">
-
-            <div class="flex items-center justify-between border-b pb-3 mb-3">
-
-                <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
-
-                    <i class="fa-solid fa-paste text-indigo-600"></i>
-
-                    <span>批次貼上金額</span>
-
-                </h3>
-
-                <span class="text-xs bg-emerald-50 text-emerald-700 font-mono font-bold px-2.5 py-1 rounded-md border border-emerald-200">
-
-                    金額: NT$ <span id="batchPasteAmountLabel">0</span>
-
-                </span>
-
-            </div>
-
-
-            <div class="mb-3 space-y-2">
-
-                <label class="block text-xs font-semibold text-slate-600">請選擇要貼入的目標費用項目 (欄位)：</label>
-
-                <select id="batchTargetColumnSelect" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500">
-
-                    <!-- Dynamic Column Options -->
-
-                </select>
-
-            </div>
-
-
-            <div class="flex items-center justify-between mb-2">
-
-                <span class="text-xs font-semibold text-slate-600">選擇要填入的隊員名單：</span>
-
-                <button type="button" onclick="toggleSelectAllBatchMembers()" class="text-xs text-indigo-600 hover:underline">全選 / 全取消</button>
-
-            </div>
-
-
-            <div class="flex-1 overflow-y-auto border border-slate-200 rounded-lg p-2 divide-y divide-slate-100 space-y-1 mb-4" id="batchMemberList">
-
-                <!-- Dynamic Member Checkboxes -->
-
-            </div>
-
 
             <div class="flex justify-end gap-2 pt-2 border-t">
+                <button type="button" onclick="closeMonthModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs sm:text-sm font-medium">取消</button>
+                <button type="button" onclick="saveNewMonth()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs sm:text-sm font-medium">建立月份</button>
+            </div>
+        </div>
+    </div>
 
-                <button type="button" onclick="closeBatchPasteModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs sm:text-sm font-medium">取消</button>
+    <!-- Modal: Edit Month Name (修改月份名稱) -->
+    <div id="editMonthModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-xl max-w-sm w-full p-6 border border-slate-100">
+            <h3 class="text-lg font-bold text-slate-800 mb-3">修改月份名稱</h3>
+            <input type="hidden" id="oldMonthNameInput">
+            <div class="mb-4">
+                <label class="block text-xs font-semibold text-slate-600 mb-1" for="newMonthNameInput">新月份名稱</label>
+                <input type="text" id="newMonthNameInput" placeholder="例如: 2026年12月" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+            <div class="flex justify-end gap-2">
+                <button type="button" onclick="closeEditMonthModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs sm:text-sm font-medium">取消</button>
+                <button type="button" onclick="saveEditedMonthName()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs sm:text-sm font-medium">儲存修改</button>
+            </div>
+        </div>
+    </div>
 
-                <button type="button" onclick="applyBatchPaste()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs sm:text-sm font-medium flex items-center gap-1.5">
-
-                    <i class="fa-solid fa-check"></i>
-
-                    <span>確認貼上</span>
-
-                </button>
-
+    <!-- Modal: Select Excel Sheet (選擇要匯入的 Excel 分頁) -->
+    <div id="excelSheetModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-slate-100 flex flex-col max-h-[85vh]">
+            <div class="flex items-center gap-2 border-b pb-3 mb-3 text-indigo-700">
+                <i class="fa-solid fa-file-excel text-xl text-emerald-600"></i>
+                <h3 class="text-lg font-bold text-slate-800">選擇要匯入的工作表 (分頁)</h3>
+            </div>
+            <p class="text-xs text-slate-500 mb-3">請選擇您欲將資料匯入至「<span id="targetImportMonthLabel" class="font-bold text-indigo-600"></span>」的 Excel 工作表：</p>
+            
+            <div class="flex-1 overflow-y-auto space-y-2 mb-4 pr-1" id="excelSheetList">
+                <!-- Dynamic Radio Options for Sheets -->
             </div>
 
+            <div class="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button type="button" onclick="closeExcelSheetModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs sm:text-sm font-medium">取消</button>
+                <button type="button" onclick="confirmImportSelectedSheet()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs sm:text-sm font-medium flex items-center gap-1.5">
+                    <i class="fa-solid fa-check"></i>
+                    <span>確認匯入選取分頁</span>
+                </button>
+            </div>
         </div>
-
     </div>
 
+    <!-- Modal: Add / Edit Member -->
+    <div id="memberModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-slate-100">
+            <h3 class="text-lg font-bold text-slate-800 mb-4" id="memberModalTitle">新增成員</h3>
+            <input type="hidden" id="editMemberId">
+            <div class="mb-4">
+                <label class="block text-xs font-semibold text-slate-600 mb-1" for="memberNameInput">成員姓名</label>
+                <input type="text" id="memberNameInput" placeholder="請輸入姓名" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+            <div class="flex justify-between items-center">
+                <button type="button" id="btnDeleteMemberInModal" onclick="deleteMemberFromModal()" class="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg text-xs sm:text-sm font-medium transition hidden flex items-center gap-1.5">
+                    <i class="fa-solid fa-trash-can"></i>
+                    <span>刪除此成員</span>
+                </button>
+                <div class="flex gap-2 ml-auto">
+                    <button type="button" onclick="closeMemberModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs sm:text-sm font-medium">取消</button>
+                    <button type="button" onclick="saveMember()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs sm:text-sm font-medium">儲存</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Add / Edit Column -->
+    <div id="columnModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-slate-100">
+            <h3 class="text-lg font-bold text-slate-800 mb-4" id="columnModalTitle">新增費用支出項目 (欄位)</h3>
+            <input type="hidden" id="editColumnId">
+            <div class="mb-4">
+                <label class="block text-xs font-semibold text-slate-600 mb-1" for="columnTitleInput">費用項目名稱</label>
+                <input type="text" id="columnTitleInput" placeholder="例如: 12月隊費、教練費、裝備費" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+            <div class="mb-4">
+                <label class="block text-xs font-semibold text-slate-600 mb-1" for="columnNoteInput">費用項目備註說明 (選填)</label>
+                <textarea id="columnNoteInput" rows="3" placeholder="例如：住宿包含兩晚房費、此項目含隊服與球號訂製..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+                <p class="text-[11px] text-slate-400 mt-1">填寫備註後，標題旁邊將會顯示說明圖示，點擊可檢視詳細說明。</p>
+            </div>
+            <div class="flex justify-end gap-2">
+                <button onclick="closeColumnModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs sm:text-sm font-medium">取消</button>
+                <button onclick="saveColumn()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs sm:text-sm font-medium">儲存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Mobile Member Fee Edit Modal -->
+    <div id="mobileEditModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-xl max-w-lg w-full p-5 border border-slate-100 max-h-[90vh] flex flex-col">
+            <div class="flex items-center justify-between border-b pb-3 mb-3">
+                <h3 class="text-base font-bold text-slate-800" id="mobileEditModalName">隊員費用編輯</h3>
+                <span id="mobileEditModalTotal" class="text-sm font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-md">應繳: NT$ 0</span>
+            </div>
+            <div class="flex-1 overflow-y-auto space-y-3 pr-1" id="mobileEditFormBody">
+                <!-- Dynamic Fee Inputs -->
+            </div>
+            <div class="flex justify-end pt-3 mt-2 border-t">
+                <button onclick="closeMobileEditModal()" class="w-full sm:w-auto px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs sm:text-sm font-medium">完成並關閉</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Column Note View Modal -->
+    <div id="noteModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-slate-100">
+            <div class="flex items-center gap-2 mb-3 text-indigo-700">
+                <i class="fa-solid fa-circle-info text-xl text-amber-500"></i>
+                <h3 class="text-lg font-bold text-slate-800" id="noteModalTitle">項目說明</h3>
+            </div>
+            <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 text-sm text-slate-700 whitespace-pre-line min-h-[80px]" id="noteModalContent">
+                <!-- Dynamic Content -->
+            </div>
+            <div class="flex justify-end mt-4">
+                <button onclick="closeNoteModal()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs sm:text-sm font-medium">關閉</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Batch Paste Modal -->
+    <div id="batchPasteModal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6 border border-slate-100 flex flex-col max-h-[85vh]">
+            <div class="flex items-center justify-between border-b pb-3 mb-3">
+                <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                    <i class="fa-solid fa-paste text-indigo-600"></i>
+                    <span>批次貼上金額</span>
+                </h3>
+                <span class="text-xs bg-emerald-50 text-emerald-700 font-mono font-bold px-2.5 py-1 rounded-md border border-emerald-200">
+                    金額: NT$ <span id="batchPasteAmountLabel">0</span>
+                </span>
+            </div>
+
+            <div class="mb-3 space-y-2">
+                <label class="block text-xs font-semibold text-slate-600">請選擇要貼入的目標費用項目 (欄位)：</label>
+                <select id="batchTargetColumnSelect" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs sm:text-sm focus:ring-2 focus:ring-indigo-500">
+                    <!-- Dynamic Column Options -->
+                </select>
+            </div>
+
+            <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-semibold text-slate-600">選擇要填入的隊員名單：</span>
+                <button type="button" onclick="toggleSelectAllBatchMembers()" class="text-xs text-indigo-600 hover:underline">全選 / 全取消</button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto border border-slate-200 rounded-lg p-2 divide-y divide-slate-100 space-y-1 mb-4" id="batchMemberList">
+                <!-- Dynamic Member Checkboxes -->
+            </div>
+
+            <div class="flex justify-end gap-2 pt-2 border-t">
+                <button type="button" onclick="closeBatchPasteModal()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs sm:text-sm font-medium">取消</button>
+                <button type="button" onclick="applyBatchPaste()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs sm:text-sm font-medium flex items-center gap-1.5">
+                    <i class="fa-solid fa-check"></i>
+                    <span>確認貼上</span>
+                </button>
+            </div>
+        </div>
+    </div>
 
     <!-- Toast Notification Message -->
-
     <div id="toast" class="fixed bottom-5 right-5 bg-slate-800 text-white text-xs sm:text-sm px-4 py-3 rounded-lg shadow-lg opacity-0 transition-opacity duration-300 pointer-events-none z-50 flex items-center gap-2">
-
         <i id="toastIcon" class="fa-solid fa-circle-check text-emerald-400 text-base"></i>
-
         <span id="toastText">操作成功</span>
-
     </div>
 
+    <!-- Firebase SDK & Core Logic -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-    <script>
+        // Firebase 配置
+        const firebaseConfig = {
+            apiKey: "AIzaSyDICgwxG4eGVg_g3iQrAnHvGpVc0WFU3J0",
+            authDomain: "expense-ddcfe.firebaseapp.com",
+            projectId: "expense-ddcfe",
+            storageBucket: "expense-ddcfe.firebasestorage.app",
+            messagingSenderId: "457060907844",
+            appId: "1:457060907844:web:1574ec3ffa204cd4383511"
+        };
+
+        // 初始化 Firebase & Firestore
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const dataDocRef = doc(db, "expense_tracker", "main_data");
+        const adminDocRef = doc(db, "expense_tracker", "admin_config");
 
         const DEFAULT_MONTH_KEY = "2026年11月";
 
-       
-
         const INITIAL_COLUMNS = [
-
             { id: "col_1", title: "十一月隊費", note: "月度例行隊費支出" },
-
             { id: "col_2", title: "課後班費用", note: "課後訓練加強班指導費用" },
-
             { id: "col_3", title: "對抗賽 (新竹市站) 餐費", note: "比賽當天選手與教練團餐盒" },
-
             { id: "col_4", title: "縣長盃代訂餐費", note: "大會代訂午餐便當" },
-
             { id: "col_5", title: "後援會服", note: "隊員及家長新版後援會隊服訂製" },
-
             { id: "col_6", title: "夜訓餐費", note: "夜間集訓晚點心與餐食補給" },
-
             { id: "col_7", title: "會長盃住宿費", note: "會長盃全國賽飯店兩晚住宿費" },
-
             { id: "col_8", title: "摩亞盃住宿費", note: "摩亞盃住宿費與遊覽車車資分攤" },
-
             { id: "col_9", title: "協助球隊購買支出於隊費直接折抵", note: "家長先行墊付隊伍物資之折抵金額（為負數）" },
-
             { id: "col_10", title: "10月份個練費用", note: "十月份個人專項訓練課程費用" }
-
         ];
-
 
         const INITIAL_MEMBERS = [
-
             { id: "m_1", name: "何紹春", values: { col_1: 2500 } },
-
             { id: "m_2", name: "徐芷喬", values: { col_1: 2500, col_2: 300 } },
-
             { id: "m_3", name: "許珮旖", values: { col_1: 2500, col_3: 130, col_5: 480 } },
-
             { id: "m_4", name: "周璘珊", values: { col_1: 2500, col_3: 130, col_5: 480, col_10: 1600 } },
-
             { id: "m_5", name: "林澤宇", values: { col_1: 2500, col_3: 65, col_5: 240, col_10: 800 } },
-
             { id: "m_6", name: "李唯碩", values: { col_1: 2500, col_5: 240 } },
-
             { id: "m_7", name: "曾以家", values: { col_1: 2500, col_5: 240, col_10: 1200 } },
-
             { id: "m_8", name: "陳子翔", values: { col_1: 2500, col_2: 300, col_3: 195, col_5: 480 } },
-
             { id: "m_9", name: "邱子茱", values: { col_1: 2500, col_5: 240, col_10: 600 } },
-
             { id: "m_10", name: "劉湘吟", values: { col_1: 2500, col_3: 130, col_5: 480 } },
-
             { id: "m_11", name: "徐子晴", values: { col_1: 2500, col_3: 65, col_4: 90, col_5: 240 } },
-
             { id: "m_12", name: "范皓銓", values: { col_1: 2500, col_5: 480, col_10: 1000 } },
-
             { id: "m_13", name: "劉冬孜", values: { col_1: 2500, col_2: 300 } },
-
             { id: "m_14", name: "劉仁皓", values: { col_1: 2500, col_3: 65, col_4: 90, col_7: 2633, col_8: 2768, col_10: 2400 } },
-
             { id: "m_15", name: "莊至恩", values: { col_1: 2500, col_5: 240, col_7: 1473, col_10: 2400 } },
-
             { id: "m_16", name: "廖沂清", values: { col_1: 2500, col_7: 993, col_10: 600 } },
-
             { id: "m_17", name: "張可霓", values: { col_1: 2500, col_3: 65, col_7: 1473, col_10: 2200 } },
-
             { id: "m_18", name: "林廷峰", values: { col_1: 2500, col_3: 130, col_4: 90, col_5: 240 } },
-
             { id: "m_19", name: "胡恒睿", values: { col_1: 2500, col_3: 65, col_7: 1473 } },
-
             { id: "m_20", name: "古易誠", values: { col_1: 2500, col_3: 65, col_7: 1473 } },
-
             { id: "m_21", name: "李亦恩", values: { col_1: 2500, col_7: 993 } },
-
             { id: "m_22", name: "葉恩彤", values: { col_1: 2500, col_2: 300, col_3: 65 } },
-
             { id: "m_23", name: "郭宇澄", values: { col_1: 2500, col_2: 300, col_3: 130, col_7: 1473, col_8: 3382, col_9: -6982, col_10: 2400 } },
-
             { id: "m_24", name: "陳秉侑", values: { col_1: 2500, col_3: 130, col_7: 1473, col_8: 2768 } },
-
             { id: "m_25", name: "徐翊宸", values: { col_1: 2500, col_3: 165, col_4: 90 } },
-
             { id: "m_26", name: "劉展誠", values: { col_1: 2500, col_2: 300, col_3: 340, col_6: 164, col_8: 680, col_9: -3695, col_10: 2000 } },
-
             { id: "m_27", name: "敖姜宸", values: { col_1: 2500, col_3: 300, col_7: 1144, col_8: 3382, col_9: -403 } },
-
             { id: "m_28", name: "溫泳玄", values: { col_1: 2500, col_2: 300, col_3: 165 } },
-
             { id: "m_29", name: "鐘定丞", values: { col_1: 2500, col_2: 300, col_3: 230, col_4: 180, col_7: 1144, col_8: 3382, col_9: -3865, col_10: 1200 } },
-
             { id: "m_30", name: "徐裕棋", values: { col_1: 2500, col_2: 300, col_3: 100, col_7: 1653, col_8: 4062 } },
-
             { id: "m_31", name: "周書帆", values: { col_1: 2500, col_2: 300, col_3: 230, col_5: 480, col_7: 1144, col_8: 2768 } },
-
             { id: "m_32", name: "楊翔宇", values: { col_1: 2500, col_3: 295, col_7: 2133, col_8: 3382 } },
-
             { id: "m_33", name: "林昕璇", values: { col_1: 2500, col_3: 65, col_7: 1473, col_8: 3382 } },
-
             { id: "m_34", name: "劉峻誠", values: { col_1: 2500, col_2: 300, col_3: 90, col_6: 370, col_7: 1144, col_8: 1368, col_10: 2000 } },
-
             { id: "m_35", name: "葉旻游", values: { col_1: 2500, col_3: 90, col_7: 1653, col_8: 2662, col_10: 1200 } },
-
             { id: "m_36", name: "黃宇樂", values: { col_1: 2500, col_3: 125, col_7: 1144, col_8: 2088, col_9: -2297 } },
-
             { id: "m_37", name: "劉昇寬", values: { col_1: 2500, col_3: 90, col_7: 1653, col_8: 2662, col_10: 1800 } },
-
             { id: "m_38", name: "黃歆甯", values: { col_1: 2500, col_2: 300, col_3: 100, col_6: 206, col_7: 993, col_8: 3382 } },
-
             { id: "m_39", name: "郭哲宇", values: { col_1: 2500, col_2: 500, col_3: 90, col_6: 294, col_7: 1144, col_8: 2088 } },
-
             { id: "m_40", name: "陳柏諺", values: { col_1: 2500, col_3: 135, col_7: 1144, col_8: 1368 } },
-
             { id: "m_41", name: "郭友錡", values: { col_1: 2500, col_2: 500, col_3: 180, col_6: 221, col_7: 1144, col_8: 2088 } },
-
             { id: "m_42", name: "吳佩瑄", values: { col_1: 2500, col_3: 90, col_7: 1473, col_8: 614 } },
-
             { id: "m_43", name: "林邑達", values: { col_1: 2500, col_2: 500, col_3: 90, col_6: 370, col_7: 1144, col_8: 2088 } },
-
             { id: "m_44", name: "劉宜菲", values: { col_1: 2500, col_2: 500, col_3: 90, col_6: 370, col_7: 1473, col_8: 614, col_10: 1200 } }
-
         ];
 
-
         let monthsData = {};
-
         let currentMonth = DEFAULT_MONTH_KEY;
-
         let columns = [];
-
         let members = [];
-
         let searchQuery = "";
-
         let viewMode = "table";
-
         let copiedAmount = null;
+        let pendingWorkbook = null;
+        let isAdminLoggedIn = false;
+        let draggedMonthKey = null; // 拖曳排序變數
 
+        function updateSyncStatus(text, iconClass) {
+            const statusEl = document.getElementById("syncStatusText");
+            const iconEl = document.getElementById("syncStatusIcon");
+            if (statusEl) statusEl.innerText = text;
+            if (iconEl) iconEl.className = iconClass;
+        }
 
         function initApp() {
+            if (localStorage.getItem("team_expense_is_admin") === "true") {
+                isAdminLoggedIn = true;
+            }
+            updateAdminUI();
 
             const savedMonths = localStorage.getItem("team_expense_months_data");
-
             const savedCurrentMonth = localStorage.getItem("team_expense_current_month");
 
-
             if (savedMonths) {
-
                 try {
-
                     monthsData = JSON.parse(savedMonths);
-
                 } catch (e) {
-
                     monthsData = {};
-
                 }
-
             }
-
 
             if (Object.keys(monthsData).length === 0) {
-
                 monthsData[DEFAULT_MONTH_KEY] = {
-
                     columns: JSON.parse(JSON.stringify(INITIAL_COLUMNS)),
-
                     members: JSON.parse(JSON.stringify(INITIAL_MEMBERS))
-
                 };
-
             }
-
 
             if (savedCurrentMonth && monthsData[savedCurrentMonth]) {
-
                 currentMonth = savedCurrentMonth;
-
             } else {
-
                 currentMonth = Object.keys(monthsData)[0];
-
             }
 
-
-            loadMonthData(currentMonth);
-
+            loadMonthData(currentMonth, false);
+            setupFirestoreListener();
         }
 
-
-        function loadMonthData(monthKey) {
-
-            currentMonth = monthKey;
-
-            localStorage.setItem("team_expense_current_month", currentMonth);
-
-           
-
-            if (!monthsData[currentMonth]) {
-
-                monthsData[currentMonth] = {
-
-                    columns: JSON.parse(JSON.stringify(columns.length > 0 ? columns : INITIAL_COLUMNS)),
-
-                    members: []
-
-                };
-
-            }
-
-
-            columns = monthsData[currentMonth].columns;
-
-            members = monthsData[currentMonth].members;
-
-
-            renderMonthTabs();
-
-            renderTable();
-
-            renderCards();
-
-        }
-
-
-        function saveState() {
-
-            monthsData[currentMonth] = { columns, members };
-
-            localStorage.setItem("team_expense_months_data", JSON.stringify(monthsData));
-
-        }
-
-
-        function renderMonthTabs() {
-
-            const container = document.getElementById("monthTabsContainer");
-
-            let html = "";
-
-            Object.keys(monthsData).forEach(mKey => {
-
-                const isActive = mKey === currentMonth;
-
-                html += `
-
-                    <div class="flex items-center group">
-
-                        <button onclick="loadMonthData('${mKey}')" class="px-3 py-1.5 rounded-lg font-medium text-xs sm:text-sm whitespace-nowrap transition flex items-center gap-1.5 ${isActive ? 'bg-indigo-600 text-white shadow-sm font-semibold' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">
-
-                            <i class="fa-regular fa-calendar-check text-xs"></i>
-
-                            <span>${mKey}</span>
-
-                        </button>
-
-                        ${Object.keys(monthsData).length > 1 ? `
-
-                            <button onclick="deleteCurrentMonth()" class="text-slate-400 hover:text-rose-500 ml-1 px-1 transition" title="刪除此月份">
-
-                                <i class="fa-solid fa-xmark text-xs"></i>
-
-                            </button>
-
-                        ` : ''}
-
-                    </div>
-
-                `;
-
-            });
-
-            container.innerHTML = html;
-
-        }
-
-
-        function openAddMonthModal() {
-
-            document.getElementById("monthNameInput").value = "";
-
-            document.getElementById("monthModal").classList.remove("hidden");
-
-            document.getElementById("monthNameInput").focus();
-
-        }
-
-
-        function closeMonthModal() {
-
-            document.getElementById("monthModal").classList.add("hidden");
-
-        }
-
-
-        function saveNewMonth() {
-
-            const monthName = document.getElementById("monthNameInput").value.trim();
-
-            const copyRoster = document.getElementById("copyRosterCheck").checked;
-
-
-            if (!monthName) {
-
-                alert("請輸入月份名稱！");
-
-                return;
-
-            }
-
-            if (monthsData[monthName]) {
-
-                alert("該月份名稱已存在！");
-
-                return;
-
-            }
-
-
-            let newMembers = [];
-
-            if (copyRoster && members.length > 0) {
-
-                newMembers = members.map(m => ({
-
-                    id: "m_" + Date.now() + "_" + Math.random().toString(36).substr(2, 4),
-
-                    name: m.name,
-
-                    values: {}
-
-                }));
-
-            }
-
-
-            monthsData[monthName] = {
-
-                columns: JSON.parse(JSON.stringify(columns.length > 0 ? columns : INITIAL_COLUMNS)),
-
-                members: newMembers
-
-            };
-
-
-            closeMonthModal();
-
-            loadMonthData(monthName);
-
-            saveState();
-
-            showToast(`已成功新增並切換至「${monthName}」`);
-
-        }
-
-
-        function deleteCurrentMonth() {
-
-            if (Object.keys(monthsData).length <= 1) {
-
-                alert("至少需要保留一個月份！");
-
-                return;
-
-            }
-
-            if (confirm(`確定要刪除「${currentMonth}」整個月份的數據嗎？此動作無法撤銷。`)) {
-
-                delete monthsData[currentMonth];
-
-                const nextMonth = Object.keys(monthsData)[0];
-
-                loadMonthData(nextMonth);
-
-                saveState();
-
-                showToast("已成功刪除該月份！");
-
-            }
-
-        }
-
-
-        function switchViewMode(mode) {
-
-            viewMode = mode;
-
-            const tableContainer = document.getElementById("tableViewContainer");
-
-            const cardsContainer = document.getElementById("cardsViewContainer");
-
-            const btnViewTable = document.getElementById("btnViewTable");
-
-            const btnViewCards = document.getElementById("btnViewCards");
-
-
-            if (mode === 'cards') {
-
-                tableContainer.classList.add("hidden");
-
-                cardsContainer.classList.remove("hidden");
-
-                btnViewCards.className = "px-2.5 py-1 text-xs font-medium rounded-md bg-white text-indigo-700 shadow-sm transition";
-
-                btnViewTable.className = "px-2.5 py-1 text-xs font-medium rounded-md text-slate-600 hover:text-indigo-600 transition";
-
-                renderCards();
-
+        function handleAdminBtnClick() {
+            if (isAdminLoggedIn) {
+                if (confirm("確定要登出管理者身分嗎？")) {
+                    isAdminLoggedIn = false;
+                    localStorage.removeItem("team_expense_is_admin");
+                    updateAdminUI();
+                    showToast("已登出管理者身分");
+                }
             } else {
-
-                cardsContainer.classList.add("hidden");
-
-                tableContainer.classList.remove("hidden");
-
-                btnViewTable.className = "px-2.5 py-1 text-xs font-medium rounded-md bg-white text-indigo-700 shadow-sm transition";
-
-                btnViewCards.className = "px-2.5 py-1 text-xs font-medium rounded-md text-slate-600 hover:text-indigo-600 transition";
-
-                renderTable();
-
+                openAdminModal();
             }
-
         }
 
-
-        // 批次複製金額相關功能
-
-        function copyAmount(val, colId) {
-
-            copiedAmount = val;
-
-            document.getElementById("copiedAmountText").innerText = val.toLocaleString();
-
-            document.getElementById("copiedBadge").classList.remove("hidden");
-
-            showToast(`已複製金額: NT$ ${val.toLocaleString()}`);
-
+        function openAdminModal() {
+            document.getElementById("adminPasswordInput").value = "";
+            document.getElementById("adminModal").classList.remove("hidden");
+            document.getElementById("adminPasswordInput").focus();
         }
 
-
-        function clearCopiedAmount() {
-
-            copiedAmount = null;
-
-            document.getElementById("copiedBadge").classList.add("hidden");
-
-            showToast("已清除複製金額");
-
+        function closeAdminModal() {
+            document.getElementById("adminModal").classList.add("hidden");
         }
 
-
-        function openBatchPasteModal() {
-
-            if (copiedAmount === null) {
-
-                alert("請先複製金額！");
-
+        async function checkAdminPassword() {
+            const inputPwd = document.getElementById("adminPasswordInput").value.trim();
+            if (!inputPwd) {
+                alert("請輸入密碼！");
                 return;
-
             }
 
-            document.getElementById("batchPasteAmountLabel").innerText = copiedAmount.toLocaleString();
+            try {
+                updateSyncStatus("驗證密碼中...", "fa-solid fa-rotate text-amber-300 animate-spin text-xs");
+                let docSnap = await getDoc(adminDocRef);
 
-           
-
-            // Populate Column Select
-
-            const colSelect = document.getElementById("batchTargetColumnSelect");
-
-            let colHtml = "";
-
-            columns.forEach(c => {
-
-                colHtml += `<option value="${c.id}">${c.title}</option>`;
-
-            });
-
-            colSelect.innerHTML = colHtml;
-
-
-            // Populate Member List Checkboxes
-
-            const memberListDiv = document.getElementById("batchMemberList");
-
-            let memberHtml = "";
-
-            members.forEach(m => {
-
-                memberHtml += `
-
-                    <label class="flex items-center justify-between p-1.5 hover:bg-slate-50 rounded cursor-pointer text-xs">
-
-                        <span class="font-medium text-slate-700">${m.name}</span>
-
-                        <input type="checkbox" name="batchMemberCheckbox" value="${m.id}" checked class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500">
-
-                    </label>
-
-                `;
-
-            });
-
-            memberListDiv.innerHTML = memberHtml;
-
-
-            document.getElementById("batchPasteModal").classList.remove("hidden");
-
-        }
-
-
-        function closeBatchPasteModal() {
-
-            document.getElementById("batchPasteModal").classList.add("hidden");
-
-        }
-
-
-        function toggleSelectAllBatchMembers() {
-
-            const checkboxes = document.querySelectorAll('input[name="batchMemberCheckbox"]');
-
-            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
-
-            checkboxes.forEach(cb => cb.checked = !allChecked);
-
-        }
-
-
-        function applyBatchPaste() {
-
-            const targetColId = document.getElementById("batchTargetColumnSelect").value;
-
-            if (!targetColId) {
-
-                alert("請選擇目標項目欄位！");
-
-                return;
-
-            }
-
-
-            const checkboxes = document.querySelectorAll('input[name="batchMemberCheckbox"]:checked');
-
-            if (checkboxes.length === 0) {
-
-                alert("請至少選擇一位隊員！");
-
-                return;
-
-            }
-
-
-            let count = 0;
-
-            checkboxes.forEach(cb => {
-
-                const memberId = cb.value;
-
-                const member = members.find(m => m.id === memberId);
-
-                if (member) {
-
-                    member.values[targetColId] = copiedAmount;
-
-                    count++;
-
+                if (!docSnap.exists()) {
+                    await setDoc(adminDocRef, { password: "88888888" });
+                    docSnap = await getDoc(adminDocRef);
                 }
 
-            });
+                const storedPassword = docSnap.data().password;
 
-
-            saveState();
-
-            renderTable();
-
-            renderCards();
-
-            closeBatchPasteModal();
-
-            showToast(`已成功將 NT$ ${copiedAmount.toLocaleString()} 批次填入 ${count} 位隊員！`);
-
+                if (inputPwd === storedPassword) {
+                    isAdminLoggedIn = true;
+                    localStorage.setItem("team_expense_is_admin", "true");
+                    updateAdminUI();
+                    closeAdminModal();
+                    showToast("🦩 管理者登入成功！");
+                } else {
+                    alert("密碼錯誤，請重新輸入！");
+                }
+                updateSyncStatus("已即時同步至雲端", "fa-solid fa-cloud-check text-emerald-400 text-xs");
+            } catch (e) {
+                console.error("Firestore 驗證錯誤:", e);
+                alert("連線至雲端資料庫驗證密碼時發生錯誤，請檢查網路連線！");
+            }
         }
 
+        function updateAdminUI() {
+            const btnText = document.getElementById("adminBtnText");
+            const btn = document.getElementById("btnAdminLogin");
+            
+            const adminOnlyElements = [
+                document.getElementById("btnAddMonthBtn"),
+                document.getElementById("btnAddMemberBtn"),
+                document.getElementById("btnAddColumnBtn"),
+                document.getElementById("btnImportExcel"),
+                document.getElementById("btnExportExcel")
+            ];
+
+            if (isAdminLoggedIn) {
+                btnText.innerText = "管理者已登入 (登出)";
+                btn.className = "bg-emerald-700 hover:bg-emerald-600 text-white font-medium text-xs sm:text-sm px-3 py-2 rounded-lg shadow transition flex items-center gap-1.5 border border-emerald-400/40";
+                
+                adminOnlyElements.forEach(el => el && el.classList.remove("hidden"));
+            } else {
+                btnText.innerText = "管理者登入";
+                btn.className = "bg-indigo-800 hover:bg-indigo-600 text-white font-medium text-xs sm:text-sm px-3 py-2 rounded-lg shadow transition flex items-center gap-1.5 border border-indigo-400/40";
+                
+                adminOnlyElements.forEach(el => el && el.classList.add("hidden"));
+            }
+        }
+
+        function setupFirestoreListener() {
+            updateSyncStatus("雲端同步中...", "fa-solid fa-rotate text-amber-300 animate-spin text-xs");
+
+            onSnapshot(dataDocRef, (docSnap) => {
+                if (docSnap.metadata.hasPendingWrites) {
+                    updateSyncStatus("已即時同步至雲端", "fa-solid fa-cloud-check text-emerald-400 text-xs");
+                    return;
+                }
+
+                if (docSnap.exists()) {
+                    const cloudData = docSnap.data();
+                    if (cloudData && cloudData.monthsData) {
+                        monthsData = cloudData.monthsData;
+                        const savedCurrentMonth = localStorage.getItem("team_expense_current_month");
+                        if (savedCurrentMonth && monthsData[savedCurrentMonth]) {
+                            currentMonth = savedCurrentMonth;
+                        } else if (!monthsData[currentMonth]) {
+                            currentMonth = Object.keys(monthsData)[0] || DEFAULT_MONTH_KEY;
+                        }
+                        loadMonthData(currentMonth, false);
+                    }
+                    updateSyncStatus("已即時同步至雲端", "fa-solid fa-cloud-check text-emerald-400 text-xs");
+                } else {
+                    saveState();
+                    updateSyncStatus("已即時同步至雲端", "fa-solid fa-cloud-check text-emerald-400 text-xs");
+                }
+            }, (error) => {
+                console.error("Firestore 同步失敗:", error);
+                updateSyncStatus("雲端連線失敗 (使用離線快取)", "fa-solid fa-cloud-slash text-rose-400 text-xs");
+            });
+        }
+
+        function loadMonthData(monthKey, shouldSave = true) {
+            currentMonth = monthKey;
+            localStorage.setItem("team_expense_current_month", currentMonth);
+           
+            if (!monthsData[currentMonth]) {
+                monthsData[currentMonth] = {
+                    columns: JSON.parse(JSON.stringify(columns.length > 0 ? columns : INITIAL_COLUMNS)),
+                    members: []
+                };
+            }
+
+            columns = monthsData[currentMonth].columns;
+            members = monthsData[currentMonth].members;
+
+            renderMonthTabs();
+            renderTable();
+            renderCards();
+
+            if (shouldSave) {
+                saveState();
+            }
+        }
+
+        async function saveState() {
+            monthsData[currentMonth] = { columns, members };
+            localStorage.setItem("team_expense_months_data", JSON.stringify(monthsData));
+            localStorage.setItem("team_expense_current_month", currentMonth);
+
+            try {
+                updateSyncStatus("儲存中...", "fa-solid fa-rotate text-amber-300 animate-spin text-xs");
+                await setDoc(dataDocRef, { 
+                    monthsData, 
+                    updatedAt: new Date().toISOString() 
+                }, { merge: true });
+                updateSyncStatus("已即時同步至雲端", "fa-solid fa-cloud-check text-emerald-400 text-xs");
+            } catch (e) {
+                console.error("Save to Firestore Error:", e);
+                updateSyncStatus("儲存失敗 (暫存本地)", "fa-solid fa-triangle-exclamation text-amber-400 text-xs");
+            }
+        }
+
+        // 月份欄位 Drag and Drop 拖曳排序事件處理
+        function handleMonthDragStart(e, mKey) {
+            draggedMonthKey = mKey;
+            e.dataTransfer.effectAllowed = "move";
+            e.dataTransfer.setData("text/plain", mKey);
+            e.currentTarget.classList.add("opacity-40", "scale-95");
+        }
+
+        function handleMonthDragOver(e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "move";
+        }
+
+        function handleMonthDragEnter(e) {
+            e.preventDefault();
+            e.currentTarget.classList.add("border-indigo-500", "ring-2", "ring-indigo-400", "bg-indigo-50");
+        }
+
+        function handleMonthDragLeave(e) {
+            e.currentTarget.classList.remove("border-indigo-500", "ring-2", "ring-indigo-400", "bg-indigo-50");
+        }
+
+        function handleMonthDrop(e, targetKey) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.currentTarget.classList.remove("border-indigo-500", "ring-2", "ring-indigo-400", "bg-indigo-50");
+
+            if (!draggedMonthKey || draggedMonthKey === targetKey) return;
+
+            const keys = Object.keys(monthsData);
+            const dragIdx = keys.indexOf(draggedMonthKey);
+            const targetIdx = keys.indexOf(targetKey);
+
+            if (dragIdx > -1 && targetIdx > -1) {
+                keys.splice(dragIdx, 1);
+                keys.splice(targetIdx, 0, draggedMonthKey);
+
+                const reorderedMonthsData = {};
+                keys.forEach(k => {
+                    reorderedMonthsData[k] = monthsData[k];
+                });
+                monthsData = reorderedMonthsData;
+
+                saveState();
+                renderMonthTabs();
+                showToast(`已成功重新排序月份標籤！`);
+            }
+        }
+
+        function handleMonthDragEnd(e) {
+            e.currentTarget.classList.remove("opacity-40", "scale-95");
+            draggedMonthKey = null;
+        }
+
+        function renderMonthTabs() {
+            const container = document.getElementById("monthTabsContainer");
+            let html = "";
+            Object.keys(monthsData).forEach(mKey => {
+                const isActive = mKey === currentMonth;
+                html += `
+                    <div draggable="true"
+                         ondragstart="handleMonthDragStart(event, '${mKey}')"
+                         ondragover="handleMonthDragOver(event)"
+                         ondragenter="handleMonthDragEnter(event)"
+                         ondragleave="handleMonthDragLeave(event)"
+                         ondrop="handleMonthDrop(event, '${mKey}')"
+                         ondragend="handleMonthDragEnd(event)"
+                         class="flex items-center group bg-slate-100/80 rounded-lg p-0.5 border border-slate-200/50 cursor-grab active:cursor-grabbing transition-all select-none hover:border-slate-300">
+                        <button onclick="loadMonthData('${mKey}')" class="px-3 py-1.5 rounded-lg font-medium text-xs sm:text-sm whitespace-nowrap transition flex items-center gap-1.5 ${isActive ? 'bg-indigo-600 text-white shadow-sm font-semibold' : 'text-slate-600 hover:bg-slate-200'}">
+                            <i class="fa-regular fa-calendar-check text-xs"></i>
+                            <span>${mKey}</span>
+                        </button>
+                        <button onclick="openEditMonthModal('${mKey}')" class="text-slate-400 hover:text-indigo-600 px-1 transition opacity-70 hover:opacity-100" title="修改月份名稱">
+                            <i class="fa-solid fa-pen text-[11px]"></i>
+                        </button>
+                        ${Object.keys(monthsData).length > 1 ? `
+                            <button onclick="deleteMonth('${mKey}')" class="text-slate-400 hover:text-rose-500 pr-1 px-0.5 transition opacity-70 hover:opacity-100" title="刪除此月份">
+                                <i class="fa-solid fa-xmark text-xs"></i>
+                            </button>
+                        ` : ''}
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        function openEditMonthModal(mKey) {
+            document.getElementById("oldMonthNameInput").value = mKey;
+            document.getElementById("newMonthNameInput").value = mKey;
+            document.getElementById("editMonthModal").classList.remove("hidden");
+            document.getElementById("newMonthNameInput").focus();
+        }
+
+        function closeEditMonthModal() {
+            document.getElementById("editMonthModal").classList.add("hidden");
+        }
+
+        function saveEditedMonthName() {
+            const oldKey = document.getElementById("oldMonthNameInput").value;
+            const newKey = document.getElementById("newMonthNameInput").value.trim();
+
+            if (!newKey) {
+                alert("請輸入月份名稱！");
+                return;
+            }
+
+            if (newKey !== oldKey && monthsData[newKey]) {
+                alert("該月份名稱已存在！");
+                return;
+            }
+
+            if (newKey !== oldKey) {
+                monthsData[newKey] = monthsData[oldKey];
+                delete monthsData[oldKey];
+
+                if (currentMonth === oldKey) {
+                    currentMonth = newKey;
+                }
+                saveState();
+                renderMonthTabs();
+                showToast(`已成功將「${oldKey}」更名為「${newKey}」`);
+            }
+            closeEditMonthModal();
+        }
+
+        function openAddMonthModal() {
+            document.getElementById("monthNameInput").value = "";
+            
+            const container = document.getElementById("monthColumnCheckboxes");
+            let html = "";
+            if (columns.length === 0) {
+                html = `<p class="text-xs text-slate-400 py-2">當前月份無任何費用項目</p>`;
+            } else {
+                columns.forEach(col => {
+                    html += `
+                        <label class="flex items-center justify-between p-2 hover:bg-white rounded border border-slate-200/60 cursor-pointer text-xs bg-white/50 transition">
+                            <span class="font-medium text-slate-700 truncate pr-2">${col.title}</span>
+                            <input type="checkbox" name="copyColumnCheck" value="${col.id}" checked class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 shrink-0">
+                        </label>
+                    `;
+                });
+            }
+            container.innerHTML = html;
+
+            document.getElementById("monthModal").classList.remove("hidden");
+            document.getElementById("monthNameInput").focus();
+        }
+
+        function closeMonthModal() {
+            document.getElementById("monthModal").classList.add("hidden");
+        }
+
+        function toggleSelectAllMonthCols() {
+            const checkboxes = document.querySelectorAll('input[name="copyColumnCheck"]');
+            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+            checkboxes.forEach(cb => cb.checked = !allChecked);
+        }
+
+        function saveNewMonth() {
+            const monthName = document.getElementById("monthNameInput").value.trim();
+            const copyRoster = document.getElementById("copyRosterCheck").checked;
+
+            if (!monthName) {
+                alert("請輸入月份名稱！");
+                return;
+            }
+            if (monthsData[monthName]) {
+                alert("該月份名稱已存在！");
+                return;
+            }
+
+            const selectedColIds = Array.from(document.querySelectorAll('input[name="copyColumnCheck"]:checked')).map(el => el.value);
+            const copiedColumns = columns.filter(c => selectedColIds.includes(c.id));
+
+            let newMembers = [];
+            if (copyRoster && members.length > 0) {
+                newMembers = members.map(m => ({
+                    id: "m_" + Date.now() + "_" + Math.random().toString(36).substr(2, 4),
+                    name: m.name,
+                    values: {}
+                }));
+            }
+
+            monthsData[monthName] = {
+                columns: JSON.parse(JSON.stringify(copiedColumns)),
+                members: newMembers
+            };
+
+            closeMonthModal();
+            loadMonthData(monthName);
+            showToast(`已成功新增並切換至「${monthName}」（包含 ${copiedColumns.length} 個費用項目）`);
+        }
+
+        function deleteMonth(mKey) {
+            if (Object.keys(monthsData).length <= 1) {
+                alert("至少需要保留一個月份！");
+                return;
+            }
+            if (confirm(`確定要刪除「${mKey}」整個月份的數據嗎？此動作無法撤銷。`)) {
+                delete monthsData[mKey];
+                if (currentMonth === mKey) {
+                    currentMonth = Object.keys(monthsData)[0];
+                }
+                loadMonthData(currentMonth);
+                saveState();
+                showToast(`已成功刪除「${mKey}」！`);
+            }
+        }
+
+        function switchViewMode(mode) {
+            viewMode = mode;
+            const tableContainer = document.getElementById("tableViewContainer");
+            const cardsContainer = document.getElementById("cardsViewContainer");
+            const btnViewTable = document.getElementById("btnViewTable");
+            const btnViewCards = document.getElementById("btnViewCards");
+
+            if (mode === 'cards') {
+                tableContainer.classList.add("hidden");
+                cardsContainer.classList.remove("hidden");
+                btnViewCards.className = "px-2.5 py-1 text-xs font-medium rounded-md bg-white text-indigo-700 shadow-sm transition";
+                btnViewTable.className = "px-2.5 py-1 text-xs font-medium rounded-md text-slate-600 hover:text-indigo-600 transition";
+                renderCards();
+            } else {
+                cardsContainer.classList.add("hidden");
+                tableContainer.classList.remove("hidden");
+                btnViewTable.className = "px-2.5 py-1 text-xs font-medium rounded-md bg-white text-indigo-700 shadow-sm transition";
+                btnViewCards.className = "px-2.5 py-1 text-xs font-medium rounded-md text-slate-600 hover:text-indigo-600 transition";
+                renderTable();
+            }
+        }
+
+        function copyAmount(val, colId) {
+            copiedAmount = val;
+            document.getElementById("copiedAmountText").innerText = val.toLocaleString();
+            document.getElementById("copiedBadge").classList.remove("hidden");
+            showToast(`已複製金額: NT$ ${val.toLocaleString()}`);
+        }
+
+        function clearCopiedAmount() {
+            copiedAmount = null;
+            document.getElementById("copiedBadge").classList.add("hidden");
+            showToast("已清除複製金額");
+        }
+
+        function openBatchPasteModal() {
+            if (copiedAmount === null) {
+                alert("請先複製金額！");
+                return;
+            }
+            document.getElementById("batchPasteAmountLabel").innerText = copiedAmount.toLocaleString();
+           
+            const colSelect = document.getElementById("batchTargetColumnSelect");
+            let colHtml = "";
+            columns.forEach(c => {
+                colHtml += `<option value="${c.id}">${c.title}</option>`;
+            });
+            colSelect.innerHTML = colHtml;
+
+            const memberListDiv = document.getElementById("batchMemberList");
+            let memberHtml = "";
+            members.forEach(m => {
+                memberHtml += `
+                    <label class="flex items-center justify-between p-1.5 hover:bg-slate-50 rounded cursor-pointer text-xs">
+                        <span class="font-medium text-slate-700">${m.name}</span>
+                        <input type="checkbox" name="batchMemberCheckbox" value="${m.id}" checked class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500">
+                    </label>
+                `;
+            });
+            memberListDiv.innerHTML = memberHtml;
+
+            document.getElementById("batchPasteModal").classList.remove("hidden");
+        }
+
+        function closeBatchPasteModal() {
+            document.getElementById("batchPasteModal").classList.add("hidden");
+        }
+
+        function toggleSelectAllBatchMembers() {
+            const checkboxes = document.querySelectorAll('input[name="batchMemberCheckbox"]');
+            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+            checkboxes.forEach(cb => cb.checked = !allChecked);
+        }
+
+        function applyBatchPaste() {
+            const targetColId = document.getElementById("batchTargetColumnSelect").value;
+            if (!targetColId) {
+                alert("請選擇目標項目欄位！");
+                return;
+            }
+
+            const checkboxes = document.querySelectorAll('input[name="batchMemberCheckbox"]:checked');
+            if (checkboxes.length === 0) {
+                alert("請至少選擇一位隊員！");
+                return;
+            }
+
+            let count = 0;
+            checkboxes.forEach(cb => {
+                const memberId = cb.value;
+                const member = members.find(m => m.id === memberId);
+                if (member) {
+                    member.values[targetColId] = copiedAmount;
+                    count++;
+                }
+            });
+
+            saveState();
+            renderTable();
+            renderCards();
+            closeBatchPasteModal();
+            showToast(`已成功將 NT$ ${copiedAmount.toLocaleString()} 批次填入 ${count} 位隊員！`);
+        }
 
         function renderTable() {
-
             const headerRow = document.getElementById("tableHeaderRow");
-
             const tbody = document.getElementById("tableBody");
-
             const tfoot = document.getElementById("tableFooter");
-
 
             const filteredMembers = members.filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
-
             let headerHTML = `
-
                 <th class="p-3 w-12 text-center sticky-col-1 bg-slate-100 border-r border-slate-200">#</th>
-
                 <th class="p-3 w-36 sticky-col-2 bg-slate-100 border-r border-slate-200 shadow-sm">姓名</th>
-
             `;
-
             columns.forEach(col => {
-
                 const hasNote = col.note && col.note.trim() !== "";
-
                 headerHTML += `
-
                     <th class="py-2.5 px-2 text-center whitespace-nowrap border-r border-slate-200 group relative">
-
                         <div class="flex items-center justify-center gap-1">
-
                             <div class="flex items-center gap-1 truncate cursor-pointer" onclick="openNoteModal('${col.id}')" title="點擊查看項目說明與編輯">
-
                                 <span class="truncate font-semibold text-slate-800 hover:text-indigo-600 transition">${col.title}</span>
-
                                 ${hasNote ? `<button onclick="event.stopPropagation(); openNoteModal('${col.id}')" class="text-amber-500 hover:text-amber-600 text-xs" title="查看備註說明"><i class="fa-solid fa-circle-info"></i></button>` : ''}
-
                             </div>
-
                             <div class="flex items-center opacity-0 group-hover:opacity-100 transition">
-
                                 <button onclick="openEditColumnModal('${col.id}')" class="text-slate-400 hover:text-indigo-600 px-0.5" title="編輯項目標題與備註">
-
                                     <i class="fa-solid fa-pen text-xs"></i>
-
                                 </button>
-
                                 <button onclick="deleteColumn('${col.id}')" class="text-slate-400 hover:text-rose-500 px-0.5" title="刪除此項目欄位">
-
                                     <i class="fa-solid fa-xmark text-xs"></i>
-
                                 </button>
-
                             </div>
-
                         </div>
-
                     </th>
-
                 `;
-
             });
-
             headerHTML += `
-
                 <th class="py-2.5 px-3 text-center whitespace-nowrap bg-rose-50 text-rose-800 font-bold border-r border-rose-200">
-
                     <div class="flex items-center justify-center gap-1">
-
                         <i class="fa-solid fa-skull-crossbones text-rose-500"></i>
-
                         <span>【姜宸媽追殺區】</span>
-
                     </div>
-
                 </th>
-
                 <th class="py-2.5 px-3 w-28 text-right sticky-right bg-slate-100 border-l border-slate-200 text-indigo-700 font-bold shadow-sm whitespace-nowrap">應繳金額</th>
-
                 <th class="py-2.5 px-2 w-12 text-center whitespace-nowrap">操作</th>
-
             `;
-
             headerRow.innerHTML = headerHTML;
 
-
             let bodyHTML = "";
-
             let grandTotalSum = 0;
-
             const columnTotals = {};
-
             columns.forEach(c => columnTotals[c.id] = 0);
 
-
             filteredMembers.forEach((member, index) => {
-
                 let memberTotal = 0;
-
                 const isCheckedPaid = !!member.isPaid;
 
-
                 let rowHTML = `
-
                     <tr class="hover:bg-slate-50/80 transition group ${isCheckedPaid ? 'bg-emerald-50/30' : ''}">
-
                         <td class="py-2 px-2 text-center text-slate-400 sticky-col-1 bg-white group-hover:bg-slate-50 border-r border-slate-200 font-mono text-xs">${index + 1}</td>
-
                         <td class="py-2 px-3 font-medium text-slate-800 sticky-col-2 bg-white group-hover:bg-slate-50 border-r border-slate-200 shadow-sm whitespace-nowrap">
-
                             <div class="flex items-center justify-between gap-1">
-
                                 <div class="flex items-center gap-1.5 truncate">
-
                                     ${isCheckedPaid ? `<i class="fa-solid fa-circle-check text-emerald-500 text-sm" title="對帳完成"></i>` : `<i class="fa-regular fa-circle text-slate-300 text-xs"></i>`}
-
                                     <span class="truncate cursor-pointer hover:text-indigo-600 transition ${isCheckedPaid ? 'font-semibold text-emerald-900' : ''}" onclick="openEditMemberModal('${member.id}')">${member.name}</span>
-
                                 </div>
-
                                 <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
-
                                     <button onclick="openEditMemberModal('${member.id}')" class="text-slate-400 hover:text-indigo-600 px-0.5" title="編輯姓名">
-
                                         <i class="fa-solid fa-pen text-xs"></i>
-
                                     </button>
-
                                     <button onclick="deleteMember('${member.id}')" class="text-slate-400 hover:text-rose-500 px-0.5" title="刪除此成員">
-
                                         <i class="fa-solid fa-user-minus text-xs"></i>
-
                                     </button>
-
                                 </div>
-
                             </div>
-
                         </td>
-
                 `;
 
-
                 columns.forEach(col => {
-
                     const val = member.values[col.id] !== undefined ? member.values[col.id] : "";
-
                     const numVal = parseFloat(val) || 0;
-
                     memberTotal += numVal;
-
                     columnTotals[col.id] += numVal;
 
-
                     rowHTML += `
-
                         <td class="py-1 px-1 border-r border-slate-100 text-center relative group/cell">
-
                             <div class="flex items-center justify-center">
-
                                 <input type="number"
-
                                     value="${val}"
-
                                     placeholder="0"
-
                                     onchange="updateMemberValue('${member.id}', '${col.id}', this.value)"
-
                                     class="w-20 px-1 py-0.5 text-right bg-transparent focus:bg-white focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 rounded border hover:border-slate-300 border-transparent font-mono text-xs sm:text-sm ${numVal < 0 ? 'text-rose-600 font-semibold' : 'text-slate-700'}">
-
                                 ${val !== "" ? `
-
                                     <button onclick="copyAmount(${val}, '${col.id}')" class="opacity-0 group-hover/cell:opacity-100 transition text-slate-400 hover:text-emerald-600 ml-0.5 px-0.5" title="複製此金額">
-
                                         <i class="fa-regular fa-copy text-[11px]"></i>
-
                                     </button>
-
                                 ` : ''}
-
                             </div>
-
                         </td>
-
                     `;
-
                 });
-
 
                 grandTotalSum += memberTotal;
 
-
                 rowHTML += `
-
                         <td class="py-2 px-3 text-center border-r border-rose-100 bg-rose-50/20">
-
                             <input type="checkbox"
-
                                 ${isCheckedPaid ? 'checked' : ''}
-
                                 onchange="toggleMemberPaid('${member.id}', this.checked)"
-
                                 class="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 cursor-pointer"
-
                                 title="${isCheckedPaid ? '對帳完成' : '未對帳'}">
-
                         </td>
-
                         <td class="py-2 px-3 text-right font-bold text-indigo-700 sticky-right bg-white group-hover:bg-slate-50 border-l border-slate-200 font-mono shadow-sm whitespace-nowrap">
-
                             ${memberTotal.toLocaleString()}
-
                         </td>
-
                         <td class="py-2 px-1 text-center">
-
                             <button onclick="deleteMember('${member.id}')" class="text-slate-300 hover:text-rose-500 transition px-1 py-0.5" title="刪除隊員">
-
                                 <i class="fa-solid fa-trash-can text-xs"></i>
-
                             </button>
-
                         </td>
-
                     </tr>
-
                 `;
-
                 bodyHTML += rowHTML;
-
             });
 
-
             if (filteredMembers.length === 0) {
-
                 bodyHTML = `
-
                     <tr>
-
                         <td colspan="${columns.length + 5}" class="p-8 text-center text-slate-400">
-
                             沒有找到相關的隊員資料
-
                         </td>
-
                     </tr>
-
                 `;
-
             }
-
 
             tbody.innerHTML = bodyHTML;
 
-
             let footerHTML = `
-
                 <tr>
-
                     <td class="p-3 sticky-col-1 bg-indigo-50 border-r border-indigo-200"></td>
-
                     <td class="p-3 sticky-col-2 bg-indigo-50 border-r border-indigo-200 font-bold text-indigo-900 shadow-sm">合計 (總數)</td>
-
             `;
 
-
             columns.forEach(col => {
-
                 const colSum = columnTotals[col.id] || 0;
-
                 footerHTML += `
-
                     <td class="p-3 text-right border-r border-indigo-100 font-mono ${colSum < 0 ? 'text-rose-600' : ''}">
-
                         ${colSum.toLocaleString()}
-
                     </td>
-
                 `;
-
             });
-
 
             const paidCount = members.filter(m => m.isPaid).length;
-
             footerHTML += `
-
                     <td class="p-3 text-center border-r border-rose-200 bg-rose-100/60 font-mono text-xs text-rose-900 font-bold">
-
                         對帳: ${paidCount}/${members.length}
-
                     </td>
-
                     <td class="p-3 text-right sticky-right bg-indigo-50 border-l border-indigo-200 text-indigo-950 font-extrabold text-base font-mono shadow-sm">
-
                         ${grandTotalSum.toLocaleString()}
-
                     </td>
-
                     <td class="p-3"></td>
-
                 </tr>
-
             `;
-
             tfoot.innerHTML = footerHTML;
 
-
             document.getElementById("statMemberCount").innerText = members.length;
-
             document.getElementById("statGrandTotal").innerText = `NT$ ${grandTotalSum.toLocaleString()}`;
-
         }
-
 
         function updateMemberValue(memberId, colId, value) {
-
             const member = members.find(m => m.id === memberId);
-
             if (member) {
-
                 if (value === "" || isNaN(value)) {
-
                     delete member.values[colId];
-
                 } else {
-
                     member.values[colId] = parseFloat(value);
-
                 }
-
                 saveState();
-
                 renderTable();
-
                 renderCards();
-
             }
-
         }
-
 
         function toggleMemberPaid(memberId, isChecked) {
-
             const member = members.find(m => m.id === memberId);
-
             if (member) {
-
                 member.isPaid = isChecked;
-
                 saveState();
-
                 renderTable();
-
                 renderCards();
-
                 showToast(`${member.name} 已標示為 ${isChecked ? '【對帳完成】' : '【未對帳】'}`);
-
             }
-
         }
-
 
         function renderCards() {
-
             const container = document.getElementById("cardsViewContainer");
-
             const filteredMembers = members.filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
-
             if (filteredMembers.length === 0) {
-
                 container.innerHTML = `<div class="col-span-full p-8 text-center bg-white rounded-xl border text-slate-400">沒有找到相關隊員</div>`;
-
                 return;
-
             }
 
-
             let html = "";
-
             filteredMembers.forEach(member => {
-
                 let memberTotal = 0;
-
                 let activeFeeCount = 0;
-
                 const isCheckedPaid = !!member.isPaid;
 
-
                 columns.forEach(col => {
-
                     const val = parseFloat(member.values[col.id]) || 0;
-
                     memberTotal += val;
-
                     if (val !== 0) activeFeeCount++;
-
                 });
 
-
                 html += `
-
                     <div class="bg-white rounded-xl p-4 shadow-sm border ${isCheckedPaid ? 'border-emerald-300 bg-emerald-50/20' : 'border-slate-200'} flex flex-col justify-between hover:border-indigo-300 transition">
-
                         <div>
-
                             <div class="flex items-center justify-between border-b border-slate-100 pb-2.5 mb-3">
-
                                 <div class="flex items-center gap-2">
-
                                     <div class="w-8 h-8 rounded-full ${isCheckedPaid ? 'bg-emerald-100 text-emerald-600' : 'bg-indigo-50 text-indigo-600'} font-bold flex items-center justify-center text-xs">
-
                                         ${isCheckedPaid ? '<i class="fa-solid fa-check"></i>' : member.name.substring(0, 1)}
-
                                     </div>
-
                                     <div>
-
                                         <div class="flex items-center gap-1.5">
-
                                             <span class="font-bold text-slate-800 text-sm">${member.name}</span>
-
                                             ${isCheckedPaid ? `<span class="bg-emerald-100 text-emerald-800 text-[10px] font-bold px-1.5 py-0.5 rounded">對帳完成</span>` : ''}
-
                                         </div>
-
                                     </div>
-
                                 </div>
-
                                 <div class="text-right">
-
                                     <span class="text-[11px] text-slate-400 block">應繳總額</span>
-
                                     <strong class="text-sm font-bold font-mono text-indigo-700">NT$ ${memberTotal.toLocaleString()}</strong>
-
                                 </div>
-
                             </div>
-
                             <div class="text-xs text-slate-500 mb-3 flex items-center justify-between">
-
                                 <span>已登錄項目: <strong class="text-slate-700">${activeFeeCount}</strong> 項</span>
-
                                 <label class="inline-flex items-center gap-1 cursor-pointer">
-
                                     <input type="checkbox" ${isCheckedPaid ? 'checked' : ''} onchange="toggleMemberPaid('${member.id}', this.checked)" class="rounded text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5">
-
                                     <span class="text-[11px] font-semibold text-rose-700">姜宸媽對帳</span>
-
                                 </label>
-
                             </div>
-
                         </div>
-
                         <div class="flex gap-2 pt-2 border-t border-slate-50">
-
                             <button onclick="openMobileEditModal('${member.id}')" class="flex-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium text-xs py-2 rounded-lg transition flex items-center justify-center gap-1">
-
                                 <i class="fa-solid fa-pen-to-square"></i>
-
                                 <span>編輯費用項目</span>
-
                             </button>
-
                             <button onclick="deleteMember('${member.id}')" class="bg-rose-50 hover:bg-rose-100 text-rose-600 px-3 py-2 rounded-lg text-xs font-medium transition" title="刪除隊員">
-
                                 <i class="fa-solid fa-trash-can"></i>
-
                             </button>
-
                         </div>
-
                     </div>
-
                 `;
-
             });
-
             container.innerHTML = html;
-
         }
-
-
-        // Mobile Edit Modal
 
         function openMobileEditModal(memberId) {
-
             const member = members.find(m => m.id === memberId);
-
             if (!member) return;
-
 
             document.getElementById("mobileEditModalName").innerText = `${member.name} - 費用明細編輯`;
-
            
-
             let total = 0;
-
             let html = "";
-
             columns.forEach(col => {
-
                 const val = member.values[col.id] !== undefined ? member.values[col.id] : "";
-
                 total += parseFloat(val) || 0;
-
                 html += `
-
                     <div class="flex items-center justify-between gap-3 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-
                         <label class="text-xs font-medium text-slate-700 truncate flex-1" title="${col.title}">${col.title}</label>
-
                         <input type="number"
-
                             value="${val}"
-
                             placeholder="0"
-
                             onchange="updateMemberValue('${member.id}', '${col.id}', this.value); updateMobileModalTotal('${member.id}')"
-
                             class="w-28 px-2 py-1 text-right bg-white border border-slate-300 rounded-md font-mono text-xs focus:ring-2 focus:ring-indigo-500">
-
                     </div>
-
                 `;
-
             });
-
 
             document.getElementById("mobileEditFormBody").innerHTML = html;
-
             document.getElementById("mobileEditModalTotal").innerText = `應繳: NT$ ${total.toLocaleString()}`;
-
             document.getElementById("mobileEditModal").classList.remove("hidden");
-
         }
-
 
         function updateMobileModalTotal(memberId) {
-
             const member = members.find(m => m.id === memberId);
-
             if (!member) return;
-
             let total = 0;
-
             columns.forEach(col => {
-
                 total += parseFloat(member.values[col.id]) || 0;
-
             });
-
             document.getElementById("mobileEditModalTotal").innerText = `應繳: NT$ ${total.toLocaleString()}`;
-
         }
-
 
         function closeMobileEditModal() {
-
             document.getElementById("mobileEditModal").classList.add("hidden");
-
             renderTable();
-
             renderCards();
-
         }
-
 
         function openAddMemberModal() {
-
             document.getElementById("memberModalTitle").innerText = "新增成員";
-
             document.getElementById("editMemberId").value = "";
-
             document.getElementById("memberNameInput").value = "";
-
             document.getElementById("btnDeleteMemberInModal").classList.add("hidden");
-
             document.getElementById("memberModal").classList.remove("hidden");
-
             document.getElementById("memberNameInput").focus();
-
         }
-
 
         function openEditMemberModal(id) {
-
             const m = members.find(item => item.id === id);
-
             if (!m) return;
-
             document.getElementById("memberModalTitle").innerText = "修改隊員姓名";
-
             document.getElementById("editMemberId").value = id;
-
             document.getElementById("memberNameInput").value = m.name;
-
             document.getElementById("btnDeleteMemberInModal").classList.remove("hidden");
-
             document.getElementById("memberModal").classList.remove("hidden");
-
             document.getElementById("memberNameInput").focus();
-
         }
-
 
         function closeMemberModal() {
-
             document.getElementById("memberModal").classList.add("hidden");
-
         }
-
 
         function deleteMemberFromModal() {
-
             const editId = document.getElementById("editMemberId").value;
-
             if (editId) {
-
                 deleteMember(editId);
-
                 closeMemberModal();
-
             }
-
         }
-
 
         function saveMember() {
-
             const nameInput = document.getElementById("memberNameInput").value.trim();
-
             const editId = document.getElementById("editMemberId").value;
-
             if (!nameInput) {
-
                 alert("請輸入成員姓名！");
-
                 return;
-
             }
-
 
             if (editId) {
-
                 const member = members.find(m => m.id === editId);
-
                 if (member) {
-
                     member.name = nameInput;
-
                     showToast(`已成功修改隊員姓名為: ${nameInput}`);
-
                 }
-
             } else {
-
                 const newMember = {
-
                     id: "m_" + Date.now(),
-
                     name: nameInput,
-
                     values: {}
-
                 };
-
                 members.push(newMember);
-
                 showToast(`已成功新增隊員: ${nameInput}`);
-
             }
 
-
             saveState();
-
             renderTable();
-
             renderCards();
-
             closeMemberModal();
-
         }
-
 
         function deleteMember(id) {
-
             const m = members.find(item => item.id === id);
-
             if (m && confirm(`確定要刪除隊員 "${m.name}" 嗎？刪除後不可恢復。`)) {
-
                 members = members.filter(item => item.id !== id);
-
                 saveState();
-
                 renderTable();
-
                 renderCards();
-
                 showToast(`已刪除隊員 "${m.name}"`);
-
             }
-
         }
-
 
         function openAddColumnModal() {
-
             document.getElementById("columnModalTitle").innerText = "新增費用支出項目 (欄位)";
-
             document.getElementById("editColumnId").value = "";
-
             document.getElementById("columnTitleInput").value = "";
-
             document.getElementById("columnNoteInput").value = "";
-
             document.getElementById("columnModal").classList.remove("hidden");
-
             document.getElementById("columnTitleInput").focus();
-
         }
-
 
         function openEditColumnModal(colId) {
-
             const col = columns.find(c => c.id === colId);
-
             if (!col) return;
-
             document.getElementById("columnModalTitle").innerText = "修改費用項目名稱與備註";
-
             document.getElementById("editColumnId").value = colId;
-
             document.getElementById("columnTitleInput").value = col.title || "";
-
             document.getElementById("columnNoteInput").value = col.note || "";
-
             document.getElementById("columnModal").classList.remove("hidden");
-
             document.getElementById("columnTitleInput").focus();
-
         }
-
 
         function closeColumnModal() {
-
             document.getElementById("columnModal").classList.add("hidden");
-
         }
-
 
         function saveColumn() {
-
             const titleInput = document.getElementById("columnTitleInput").value.trim();
-
             const noteInput = document.getElementById("columnNoteInput").value.trim();
-
             const editId = document.getElementById("editColumnId").value;
-
             if (!titleInput) {
-
                 alert("請輸入項目名稱！");
-
                 return;
-
             }
-
 
             if (editId) {
-
                 const col = columns.find(c => c.id === editId);
-
                 if (col) {
-
                     col.title = titleInput;
-
                     col.note = noteInput;
-
                     showToast(`已更新項目: ${titleInput}`);
-
                 }
-
             } else {
-
                 const newCol = {
-
                     id: "col_" + Date.now(),
-
                     title: titleInput,
-
                     note: noteInput
-
                 };
-
                 columns.push(newCol);
-
                 showToast(`已新增費用欄位: ${titleInput}`);
-
             }
-
 
             saveState();
-
             renderTable();
-
             renderCards();
-
             closeColumnModal();
-
         }
-
 
         function openNoteModal(colId) {
-
             const col = columns.find(c => c.id === colId);
-
             if (!col) return;
-
             document.getElementById("noteModalTitle").innerText = col.title;
-
             document.getElementById("noteModalContent").innerText = col.note && col.note.trim() !== "" ? col.note : "尚無詳細說明。";
-
             document.getElementById("noteModal").classList.remove("hidden");
-
         }
-
 
         function closeNoteModal() {
-
             document.getElementById("noteModal").classList.add("hidden");
-
         }
-
 
         function deleteColumn(colId) {
-
             const col = columns.find(c => c.id === colId);
-
             if (col && confirm(`確定要刪除欄位 "${col.title}" 嗎？這將會清空全體成員在該項目的金額。`)) {
-
                 columns = columns.filter(c => c.id !== colId);
-
                 members.forEach(m => {
-
                     delete m.values[colId];
-
                 });
-
                 saveState();
-
                 renderTable();
-
                 renderCards();
-
                 showToast(`已刪除項目: ${col.title}`);
-
             }
-
         }
-
-
-        // Excel 觸發與解析（支援比對 & 自動新增欄位與隊員）
 
         function triggerExcelImport() {
-
             document.getElementById("excelFileInput").click();
-
         }
-
 
         function handleExcelImport(event) {
-
             const file = event.target.files[0];
-
             if (!file) return;
 
-
             if (typeof XLSX === 'undefined') {
-
                 alert("Excel 解析模組載入失敗，請檢查網路連線。");
-
                 return;
-
             }
-
 
             const reader = new FileReader();
-
             reader.onload = function(e) {
-
                 try {
-
                     const data = new Uint8Array(e.target.result);
-
-                    const workbook = XLSX.read(data, { type: 'array' });
-
-                    const firstSheetName = workbook.SheetNames[0];
-
-                    const worksheet = workbook.Sheets[firstSheetName];
-
-
-                    const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-
-
-                    if (!jsonData || jsonData.length < 2) {
-
-                        alert("Excel 內容為空或格式不正確！");
-
+                    pendingWorkbook = XLSX.read(data, { type: 'array' });
+                    
+                    if (!pendingWorkbook || !pendingWorkbook.SheetNames || pendingWorkbook.SheetNames.length === 0) {
+                        alert("Excel 檔案未包含任何工作表！");
                         return;
-
                     }
 
-
-                    if (!confirm(`是否將此 Excel 資料合併寫入當前月份「${currentMonth}」統計系統中？\n• 相同的費用項目與隊員將更新金額\n• 新的費用項目與隊員將自動新增`)) {
-
-                        event.target.value = "";
-
-                        return;
-
-                    }
-
-
-                    const headerRow = jsonData[0];
-
-                    let nameColIdx = -1;
-
-
-                    headerRow.forEach((colName, index) => {
-
-                        if (!colName) return;
-
-                        const trimmed = String(colName).trim();
-
-                        if (trimmed === "姓名" || trimmed === "成員姓名" || trimmed === "Name") {
-
-                            nameColIdx = index;
-
-                        }
-
-                    });
-
-
-                    if (nameColIdx === -1) {
-
-                        nameColIdx = 0;
-
-                    }
-
-
-                    const excelColMapping = {};
-
-                    let addedColCount = 0;
-
-
-                    headerRow.forEach((colName, index) => {
-
-                        if (index === nameColIdx || !colName) return;
-
-                        const trimmed = String(colName).trim();
-
-                        if (trimmed === "應繳金額" || trimmed === "合計" || trimmed === "總計" || trimmed === "#" || trimmed === "序號" || trimmed.includes("對帳")) {
-
-                            return;
-
-                        }
-
-
-                        let existingCol = columns.find(c => c.title.trim().toLowerCase() === trimmed.toLowerCase());
-
-                        if (!existingCol) {
-
-                            existingCol = {
-
-                                id: "col_" + Date.now() + "_" + Math.random().toString(36).substr(2, 4),
-
-                                title: trimmed,
-
-                                note: ""
-
-                            };
-
-                            columns.push(existingCol);
-
-                            addedColCount++;
-
-                        }
-
-                        excelColMapping[index] = existingCol.id;
-
-                    });
-
-
-                    let updatedMemberCount = 0;
-
-                    let addedMemberCount = 0;
-
-
-                    for (let r = 1; r < jsonData.length; r++) {
-
-                        const row = jsonData[r];
-
-                        if (!row || row.length === 0) continue;
-
-
-                        const rawName = row[nameColIdx];
-
-                        if (!rawName) continue;
-
-                        const memberName = String(rawName).trim();
-
-
-                        if (memberName === "合計" || memberName === "總計" || memberName === "Total") continue;
-
-
-                        let targetMember = members.find(m => m.name.trim().toLowerCase() === memberName.toLowerCase());
-
-                        if (!targetMember) {
-
-                            targetMember = {
-
-                                id: "m_" + Date.now() + "_" + Math.random().toString(36).substr(2, 4),
-
-                                name: memberName,
-
-                                values: {}
-
-                            };
-
-                            members.push(targetMember);
-
-                            addedMemberCount++;
-
-                        } else {
-
-                            updatedMemberCount++;
-
-                        }
-
-
-                        Object.keys(excelColMapping).forEach(cIdx => {
-
-                            const colId = excelColMapping[cIdx];
-
-                            const cellValue = row[cIdx];
-
-                            const val = parseFloat(cellValue);
-
-                           
-
-                            if (cellValue !== undefined && cellValue !== null && cellValue !== "" && !isNaN(val)) {
-
-                                targetMember.values[colId] = val;
-
-                            }
-
-                        });
-
-                    }
-
-
-                    saveState();
-
-                    renderTable();
-
-                    renderCards();
-
-                    showToast(`Excel 匯入完成！新增 ${addedColCount} 個項目、新增 ${addedMemberCount} 位隊員、更新 ${updatedMemberCount} 位隊員金額。`);
-
-
+                    renderSheetSelectionModal(pendingWorkbook.SheetNames);
                 } catch (err) {
-
                     console.error(err);
-
                     alert("讀取 Excel 檔案時發生錯誤，請確定檔案無損壞。");
-
                 } finally {
-
                     event.target.value = "";
-
                 }
-
             };
-
-
             reader.readAsArrayBuffer(file);
-
         }
 
+        function renderSheetSelectionModal(sheetNames) {
+            const container = document.getElementById("excelSheetList");
+            document.getElementById("targetImportMonthLabel").innerText = currentMonth;
 
-        function exportToExcel() {
+            let html = "";
+            sheetNames.forEach((name, idx) => {
+                html += `
+                    <label class="flex items-center justify-between p-3 bg-slate-50 hover:bg-indigo-50/50 border border-slate-200 rounded-lg cursor-pointer transition">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-regular fa-file-lines text-indigo-500 text-base"></i>
+                            <span class="text-sm font-medium text-slate-800">${name}</span>
+                        </div>
+                        <input type="radio" name="selectedExcelSheet" value="${name}" ${idx === 0 ? 'checked' : ''} class="w-4 h-4 text-indigo-600 focus:ring-indigo-500">
+                    </label>
+                `;
+            });
+            container.innerHTML = html;
+            document.getElementById("excelSheetModal").classList.remove("hidden");
+        }
 
-            if (typeof XLSX === 'undefined') {
+        function closeExcelSheetModal() {
+            document.getElementById("excelSheetModal").classList.add("hidden");
+            pendingWorkbook = null;
+        }
 
-                alert("Excel 匯出模組載入失敗，請檢查網路連線。");
+        function confirmImportSelectedSheet() {
+            if (!pendingWorkbook) return;
 
+            const radios = document.querySelectorAll('input[name="selectedExcelSheet"]:checked');
+            if (radios.length === 0) {
+                alert("請選擇一個工作表！");
                 return;
-
             }
 
+            const sheetName = radios[0].value;
+            const worksheet = pendingWorkbook.Sheets[sheetName];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+            if (!jsonData || jsonData.length < 2) {
+                alert(`「${sheetName}」工作表內容為空或格式不正確！`);
+                return;
+            }
+
+            closeExcelSheetModal();
+            processImportData(jsonData, sheetName);
+        }
+
+        function processImportData(jsonData, sheetName) {
+            const replaceRosterChoice = confirm(`您選擇匯入「${sheetName}」工作表。\n\n請問要如何處理資料？\n\n【確定】: 完全替換「${currentMonth}」的隊員名單與數據（刪除原有舊隊員）\n【取消】: 保留舊隊員，僅合併/更新數據`);
+
+            if (replaceRosterChoice) {
+                members = []; // 清空舊隊員名單
+            }
+
+            const headerRow = jsonData[0];
+            let nameColIdx = -1;
+
+            headerRow.forEach((colName, index) => {
+                if (!colName) return;
+                const trimmed = String(colName).trim();
+                if (trimmed === "姓名" || trimmed === "成員姓名" || trimmed === "Name") {
+                    nameColIdx = index;
+                }
+            });
+
+            if (nameColIdx === -1) {
+                nameColIdx = 0;
+            }
+
+            const excelColMapping = {};
+            let addedColCount = 0;
+
+            headerRow.forEach((colName, index) => {
+                if (index === nameColIdx || !colName) return;
+                const trimmed = String(colName).trim();
+                if (trimmed === "應繳金額" || trimmed === "合計" || trimmed === "總計" || trimmed === "#" || trimmed === "序號" || trimmed.includes("對帳")) {
+                    return;
+                }
+
+                let existingCol = columns.find(c => c.title.trim().toLowerCase() === trimmed.toLowerCase());
+                if (!existingCol) {
+                    existingCol = {
+                        id: "col_" + Date.now() + "_" + Math.random().toString(36).substr(2, 4),
+                        title: trimmed,
+                        note: ""
+                    };
+                    columns.push(existingCol);
+                    addedColCount++;
+                }
+                excelColMapping[index] = existingCol.id;
+            });
+
+            let updatedMemberCount = 0;
+            let addedMemberCount = 0;
+
+            for (let r = 1; r < jsonData.length; r++) {
+                const row = jsonData[r];
+                if (!row || row.length === 0) continue;
+
+                const rawName = row[nameColIdx];
+                if (!rawName) continue;
+                const memberName = String(rawName).trim();
+
+                if (memberName === "合計" || memberName === "總計" || memberName === "Total") continue;
+
+                let targetMember = members.find(m => m.name.trim().toLowerCase() === memberName.toLowerCase());
+                if (!targetMember) {
+                    targetMember = {
+                        id: "m_" + Date.now() + "_" + Math.random().toString(36).substr(2, 4),
+                        name: memberName,
+                        values: {}
+                    };
+                    members.push(targetMember);
+                    addedMemberCount++;
+                } else {
+                    updatedMemberCount++;
+                }
+
+                Object.keys(excelColMapping).forEach(cIdx => {
+                    const colId = excelColMapping[cIdx];
+                    const cellValue = row[cIdx];
+                    const val = parseFloat(cellValue);
+                   
+                    if (cellValue !== undefined && cellValue !== null && cellValue !== "" && !isNaN(val)) {
+                        targetMember.values[colId] = val;
+                    }
+                });
+            }
+
+            saveState();
+            renderTable();
+            renderCards();
+            showToast(`已成功從「${sheetName}」分頁匯入資料！（新增 ${addedMemberCount} 位隊員，共 ${members.length} 人）`);
+        }
+
+        function exportToExcel() {
+            if (typeof XLSX === 'undefined') {
+                alert("Excel 匯出模組載入失敗，請檢查網路連線。");
+                return;
+            }
 
             const headers = ["姓名", ...columns.map(c => c.title), "【姜宸媽追殺區】對帳", "應繳金額"];
-
             const data = [headers];
 
-
             let grandTotal = 0;
-
             const columnTotals = {};
-
             columns.forEach(c => columnTotals[c.id] = 0);
-
             let totalPaidCount = 0;
 
-
             members.forEach(member => {
-
                 let memberTotal = 0;
-
                 const row = [member.name];
 
-
                 columns.forEach(col => {
-
                     const val = member.values[col.id] !== undefined ? parseFloat(member.values[col.id]) : 0;
-
                     row.push(val !== 0 ? val : "");
-
                     memberTotal += val;
-
                     columnTotals[col.id] += val;
-
                 });
 
-
                 if (member.isPaid) totalPaidCount++;
-
                 row.push(member.isPaid ? "已對帳" : "未對帳");
-
                 row.push(memberTotal);
-
                 grandTotal += memberTotal;
-
                 data.push(row);
-
             });
-
 
             const totalRow = ["合計"];
-
             columns.forEach(col => {
-
                 totalRow.push(columnTotals[col.id] || 0);
-
             });
-
             totalRow.push(`完成: ${totalPaidCount}/${members.length}`);
-
             totalRow.push(grandTotal);
-
             data.push(totalRow);
 
-
             const worksheet = XLSX.utils.aoa_to_sheet(data);
-
             const workbook = XLSX.utils.book_new();
-
             XLSX.utils.book_append_sheet(workbook, worksheet, `${currentMonth}_費用統計`);
 
-
             const colWidths = headers.map(h => ({ wch: Math.max(h.length * 3, 12) }));
-
             worksheet['!cols'] = colWidths;
 
-
             XLSX.writeFile(workbook, `團隊費用統計表_${currentMonth}.xlsx`);
-
             showToast("Excel 統計表匯出成功！");
-
         }
-
 
         function handleSearch() {
-
             searchQuery = document.getElementById("searchInput").value;
-
             renderTable();
-
             renderCards();
-
         }
-
 
         function showToast(message) {
-
             const toast = document.getElementById("toast");
-
             const toastText = document.getElementById("toastText");
-
             toastText.innerText = message;
-
             toast.classList.remove("opacity-0", "pointer-events-none");
-
             toast.classList.add("opacity-100");
 
-
             setTimeout(() => {
-
                 toast.classList.remove("opacity-100");
-
                 toast.classList.add("opacity-0", "pointer-events-none");
-
             }, 2500);
-
         }
 
+        // 全域 window 事件匯出
+        Object.assign(window, {
+            handleAdminBtnClick,
+            openAdminModal,
+            closeAdminModal,
+            checkAdminPassword,
+            handleMonthDragStart,
+            handleMonthDragOver,
+            handleMonthDragEnter,
+            handleMonthDragLeave,
+            handleMonthDrop,
+            handleMonthDragEnd,
+            loadMonthData,
+            openAddMonthModal,
+            closeMonthModal,
+            toggleSelectAllMonthCols,
+            saveNewMonth,
+            openEditMonthModal,
+            closeEditMonthModal,
+            saveEditedMonthName,
+            deleteMonth,
+            switchViewMode,
+            copyAmount,
+            clearCopiedAmount,
+            openBatchPasteModal,
+            closeBatchPasteModal,
+            toggleSelectAllBatchMembers,
+            applyBatchPaste,
+            renderTable,
+            renderCards,
+            updateMemberValue,
+            toggleMemberPaid,
+            openMobileEditModal,
+            updateMobileModalTotal,
+            closeMobileEditModal,
+            openAddMemberModal,
+            openEditMemberModal,
+            closeMemberModal,
+            deleteMemberFromModal,
+            saveMember,
+            deleteMember,
+            openAddColumnModal,
+            openEditColumnModal,
+            closeColumnModal,
+            saveColumn,
+            openNoteModal,
+            closeNoteModal,
+            deleteColumn,
+            triggerExcelImport,
+            handleExcelImport,
+            closeExcelSheetModal,
+            confirmImportSelectedSheet,
+            exportToExcel,
+            handleSearch,
+            showToast
+        });
 
         window.addEventListener("DOMContentLoaded", initApp);
-
     </script>
-
 </body>
-
 </html>
