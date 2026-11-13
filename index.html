@@ -582,6 +582,13 @@
                 currentMonth = Object.keys(monthsData)[0];
             }
 
+            if (!isAdminLoggedIn && monthsData[currentMonth] && monthsData[currentMonth].isHidden) {
+                const firstVisible = Object.keys(monthsData).find(k => !monthsData[k].isHidden);
+                if (firstVisible) {
+                    currentMonth = firstVisible;
+                }
+            }
+
             loadMonthData(currentMonth, false);
             setupFirestoreListener();
         }
@@ -666,6 +673,19 @@
                 btn.className = "bg-indigo-800 hover:bg-indigo-600 text-white font-medium text-xs sm:text-sm px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg shadow transition flex items-center gap-1.5 border border-indigo-400/40";
                 
                 adminOnlyElements.forEach(el => el && el.classList.add("hidden"));
+                
+                if (monthsData[currentMonth] && monthsData[currentMonth].isHidden) {
+                    const firstVisible = Object.keys(monthsData).find(k => !monthsData[k].isHidden);
+                    if (firstVisible) {
+                        currentMonth = firstVisible;
+                        localStorage.setItem("team_expense_current_month", currentMonth);
+                        columns = monthsData[currentMonth].columns || [];
+                        members = monthsData[currentMonth].members || [];
+                    } else {
+                        columns = [];
+                        members = [];
+                    }
+                }
             }
 
             renderMonthTabs();
@@ -710,6 +730,14 @@
                         } else if (!monthsData[currentMonth]) {
                             currentMonth = Object.keys(monthsData)[0] || DEFAULT_MONTH_KEY;
                         }
+
+                        if (!isAdminLoggedIn && monthsData[currentMonth] && monthsData[currentMonth].isHidden) {
+                            const firstVisible = Object.keys(monthsData).find(k => !monthsData[k].isHidden);
+                            if (firstVisible) {
+                                currentMonth = firstVisible;
+                            }
+                        }
+
                         loadMonthData(currentMonth, false);
                     }
                     updateSyncStatus("已即時同步至雲端", "fa-solid fa-cloud-check text-emerald-400 text-xs");
@@ -724,6 +752,16 @@
         }
 
         function loadMonthData(monthKey, shouldSave = true) {
+            if (!isAdminLoggedIn && monthsData[monthKey] && monthsData[monthKey].isHidden) {
+                const firstVisible = Object.keys(monthsData).find(k => !monthsData[k].isHidden);
+                if (firstVisible) {
+                    monthKey = firstVisible;
+                } else {
+                    alert("目前沒有公開的月份資料可供檢視。");
+                    return;
+                }
+            }
+
             currentMonth = monthKey;
             localStorage.setItem("team_expense_current_month", currentMonth);
            
@@ -748,7 +786,8 @@
 
         async function saveState() {
             if (currentMonth && monthsData[currentMonth]) {
-                monthsData[currentMonth] = { columns, members };
+                monthsData[currentMonth].columns = columns;
+                monthsData[currentMonth].members = members;
             }
             localStorage.setItem("team_expense_months_data", JSON.stringify(monthsData));
             localStorage.setItem("team_expense_current_month", currentMonth);
@@ -830,15 +869,24 @@
             const container = document.getElementById("monthTabsContainer");
             let html = "";
             Object.keys(monthsData).forEach(mKey => {
+                const monthInfo = monthsData[mKey];
+                const isHidden = !!monthInfo.isHidden;
+
+                if (!isAdminLoggedIn && isHidden) return;
+
                 const isActive = mKey === currentMonth;
+                
                 html += `
                     <div ${isAdminLoggedIn ? `draggable="true" ondragstart="handleMonthDragStart(event, '${mKey}')" ondragover="handleMonthDragOver(event)" ondragenter="handleMonthDragEnter(event)" ondragleave="handleMonthDragLeave(event)" ondrop="handleMonthDrop(event, '${mKey}')" ondragend="handleMonthDragEnd(event)" class="cursor-grab active:cursor-grabbing hover:border-slate-300"` : ''}
-                         class="flex items-center group bg-slate-100/80 rounded-lg p-0.5 border border-slate-200/50 transition-all select-none shrink-0">
-                        <button onclick="loadMonthData('${mKey}')" class="px-2.5 sm:px-3 py-1.5 rounded-lg font-medium text-xs sm:text-sm whitespace-nowrap transition flex items-center gap-1 sm:gap-1.5 ${isActive ? 'bg-indigo-600 text-white shadow-sm font-semibold' : 'text-slate-600 hover:bg-slate-200'}">
-                            <i class="fa-regular fa-calendar-check text-xs"></i>
-                            <span>${mKey}</span>
+                         class="flex items-center group ${isHidden ? 'bg-slate-200/60 border-slate-300/60' : 'bg-slate-100/80 border-slate-200/50'} rounded-lg p-0.5 border transition-all select-none shrink-0">
+                        <button onclick="loadMonthData('${mKey}')" class="px-2.5 sm:px-3 py-1.5 rounded-lg font-medium text-xs sm:text-sm whitespace-nowrap transition flex items-center gap-1 sm:gap-1.5 ${isActive ? (isHidden ? 'bg-slate-700 text-slate-200 shadow-sm font-semibold' : 'bg-indigo-600 text-white shadow-sm font-semibold') : (isHidden ? 'text-slate-500 hover:bg-slate-300' : 'text-slate-600 hover:bg-slate-200')}">
+                            ${isHidden ? '<i class="fa-solid fa-eye-slash text-xs"></i>' : '<i class="fa-regular fa-calendar-check text-xs"></i>'}
+                            <span class="${isHidden ? 'line-through decoration-current opacity-80' : ''}">${mKey}</span>
                         </button>
                         ${isAdminLoggedIn ? `
+                            <button onclick="toggleMonthVisibility('${mKey}')" class="text-slate-400 hover:text-amber-600 px-1 transition opacity-70 hover:opacity-100" title="${isHidden ? '目前為隱藏狀態，點擊設為公開' : '目前為公開狀態，點擊設為隱藏'}">
+                                <i class="fa-solid ${isHidden ? 'fa-eye' : 'fa-eye-slash'} text-[10px] sm:text-[11px]"></i>
+                            </button>
                             <button onclick="openEditMonthModal('${mKey}')" class="text-slate-400 hover:text-indigo-600 px-1 transition opacity-70 hover:opacity-100" title="修改月份名稱">
                                 <i class="fa-solid fa-pen text-[10px] sm:text-[11px]"></i>
                             </button>
@@ -851,7 +899,22 @@
                     </div>
                 `;
             });
+            
+            if (!isAdminLoggedIn && html === "") {
+                html = `<div class="text-xs text-slate-400 px-2 py-1">目前沒有公開的月份資料</div>`;
+            }
+            
             container.innerHTML = html;
+        }
+
+        function toggleMonthVisibility(mKey) {
+            if (!isAdminLoggedIn) return;
+            if (!monthsData[mKey]) return;
+            
+            monthsData[mKey].isHidden = !monthsData[mKey].isHidden;
+            saveState();
+            renderMonthTabs();
+            showToast(`已將「${mKey}」設為${monthsData[mKey].isHidden ? '隱藏 (僅管理者可見)' : '公開'}`);
         }
 
         function openEditMonthModal(mKey) {
@@ -1896,6 +1959,7 @@
             handleMonthDrop,
             handleMonthDragEnd,
             loadMonthData,
+            toggleMonthVisibility,
             openAddMonthModal,
             closeMonthModal,
             toggleSelectAllMonthCols,
