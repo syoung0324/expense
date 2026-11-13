@@ -685,7 +685,25 @@
                 if (docSnap.exists()) {
                     const cloudData = docSnap.data();
                     if (cloudData && cloudData.monthsData) {
-                        monthsData = cloudData.monthsData;
+                        // 依照雲端儲存的順序陣列進行排序，鎖定每個人看到的月份排序
+                        if (cloudData.monthOrder && Array.isArray(cloudData.monthOrder)) {
+                            let reorderedMonthsData = {};
+                            cloudData.monthOrder.forEach(key => {
+                                if (cloudData.monthsData[key]) {
+                                    reorderedMonthsData[key] = cloudData.monthsData[key];
+                                }
+                            });
+                            // 防呆機制：補回未在 monthOrder 中的月份
+                            Object.keys(cloudData.monthsData).forEach(key => {
+                                if (!reorderedMonthsData[key]) {
+                                    reorderedMonthsData[key] = cloudData.monthsData[key];
+                                }
+                            });
+                            monthsData = reorderedMonthsData;
+                        } else {
+                            monthsData = cloudData.monthsData;
+                        }
+
                         const savedCurrentMonth = localStorage.getItem("team_expense_current_month");
                         if (savedCurrentMonth && monthsData[savedCurrentMonth]) {
                             currentMonth = savedCurrentMonth;
@@ -738,7 +756,8 @@
             try {
                 updateSyncStatus("儲存中...", "fa-solid fa-rotate text-amber-300 animate-spin text-xs");
                 await setDoc(dataDocRef, { 
-                    monthsData, 
+                    monthsData,
+                    monthOrder: Object.keys(monthsData), // 將管理者拉動後的順序寫入雲端
                     updatedAt: new Date().toISOString() 
                 });
                 updateSyncStatus("已即時同步至雲端", "fa-solid fa-cloud-check text-emerald-400 text-xs");
@@ -1109,7 +1128,7 @@
             headerHTML += `
                 <th class="py-2 sm:py-2.5 px-2 sm:px-3 text-center whitespace-nowrap bg-rose-50 text-rose-800 font-bold border-r border-rose-200 text-xs sm:text-sm">
                     <div class="flex items-center justify-center gap-1">
-                        <i class="fa-solid fa-skull-crossbones text-rose-500"></i>
+                        <span class="text-base leading-none">🤺</span>
                         <span>【姜宸媽追殺區】</span>
                     </div>
                 </th>
@@ -1191,12 +1210,15 @@
 
                 rowHTML += `
                         <td class="py-1.5 sm:py-2 px-2 sm:px-3 text-center border-r border-rose-100 bg-rose-50/20">
-                            <input type="checkbox"
-                                ${isCheckedPaid ? 'checked' : ''}
-                                ${isAdminLoggedIn ? '' : 'disabled'}
-                                onchange="toggleMemberPaid('${member.id}', this.checked)"
-                                class="w-3.5 h-3.5 sm:w-4 sm:h-4 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 ${isAdminLoggedIn ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}"
-                                title="${isAdminLoggedIn ? (isCheckedPaid ? '對帳完成' : '未對帳') : '需管理者權限才能對帳'}">
+                            <button type="button"
+                                ${isAdminLoggedIn ? `onclick="toggleMemberPaid('${member.id}', ${!isCheckedPaid})"` : ''}
+                                class="${isAdminLoggedIn ? 'cursor-pointer hover:scale-110 transition-transform' : 'cursor-default'}"
+                                title="${isAdminLoggedIn ? (isCheckedPaid ? '取消對帳' : '點擊對帳') : (isCheckedPaid ? '對帳完成' : '需管理者權限才能對帳')}">
+                                ${isCheckedPaid ? 
+                                    `<i class="fa-solid fa-square-check text-emerald-500 text-lg sm:text-xl"></i>` : 
+                                    `<i class="fa-regular fa-square text-slate-300 text-lg sm:text-xl"></i>`
+                                }
+                            </button>
                         </td>
                         <td class="py-1.5 sm:py-2 px-2 sm:px-3 text-right font-bold text-indigo-700 sticky-right bg-white group-hover:bg-slate-50 border-l border-slate-200 font-mono shadow-sm whitespace-nowrap text-xs sm:text-sm">
                             ${memberTotal.toLocaleString()}
@@ -1336,10 +1358,18 @@
                             </div>
                             <div class="text-xs text-slate-500 mb-2.5 flex items-center justify-between">
                                 <span class="text-[11px] sm:text-xs">已登錄項目: <strong class="text-slate-700">${activeFeeCount}</strong> 項</span>
-                                <label class="inline-flex items-center gap-1 ${isAdminLoggedIn ? 'cursor-pointer' : 'cursor-not-allowed'}">
-                                    <input type="checkbox" ${isCheckedPaid ? 'checked' : ''} ${isAdminLoggedIn ? '' : 'disabled'} onchange="toggleMemberPaid('${member.id}', this.checked)" class="rounded text-emerald-600 focus:ring-emerald-500 w-3.5 h-3.5 ${isAdminLoggedIn ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'}">
+                                <div class="inline-flex items-center gap-1.5">
                                     <span class="text-[10px] sm:text-[11px] font-semibold text-rose-700">姜宸媽對帳</span>
-                                </label>
+                                    <button type="button"
+                                        ${isAdminLoggedIn ? `onclick="toggleMemberPaid('${member.id}', ${!isCheckedPaid})"` : ''}
+                                        class="${isAdminLoggedIn ? 'cursor-pointer hover:scale-110 transition-transform' : 'cursor-default'}"
+                                        title="${isAdminLoggedIn ? (isCheckedPaid ? '取消對帳' : '點擊對帳') : (isCheckedPaid ? '對帳完成' : '未對帳')}">
+                                        ${isCheckedPaid ? 
+                                            `<i class="fa-solid fa-square-check text-emerald-500 text-base"></i>` : 
+                                            `<i class="fa-regular fa-square text-slate-300 text-base"></i>`
+                                        }
+                                    </button>
+                                </div>
                             </div>
                         </div>
                         <div class="flex gap-2 pt-2 border-t border-slate-50">
