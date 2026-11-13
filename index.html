@@ -627,9 +627,10 @@
                 updateSyncStatus("驗證密碼中...", "fa-solid fa-rotate text-amber-300 animate-spin text-xs");
                 let docSnap = await getDoc(adminDocRef);
 
-                if (!docSnap.exists()) {
-                    await setDoc(adminDocRef, { password: "88888888" });
-                    docSnap = await getDoc(adminDocRef);
+                if (!docSnap.exists() || !docSnap.data().password) {
+                    alert("系統尚未於雲端設定管理者密碼，請聯繫管理員至 Firebase 後台設定！");
+                    updateSyncStatus("請先設定密碼", "fa-solid fa-triangle-exclamation text-amber-400 text-xs");
+                    return;
                 }
 
                 const storedPassword = docSnap.data().password;
