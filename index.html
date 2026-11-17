@@ -104,7 +104,7 @@
                         </span>
                     </div>
                 </div>
-                <button onclick="fetchTaiwanStockIndex(true)" class="text-slate-300 hover:text-white p-1 rounded transition shrink-0" title="重新整理台股大盤指數">
+                <button onclick="fetchTaiwanStockIndex(true)" class="text-slate-300 hover:text-white p-1 rounded transition shrink-0" title="立即更新台股大盤指數">
                     <i id="taiexRefreshIcon" class="fa-solid fa-arrows-rotate text-[11px]"></i>
                 </button>
             </div>
@@ -609,7 +609,7 @@
         }
 
         // ==========================================
-        // 2. 今日台灣股票大盤指數 (加權指數 TAIEX) - 多來源＋多代理備援
+        // 2. 今日台灣股票大盤指數 (加權指數 TAIEX) - 直連 CORS API + 自動輪詢
         // ==========================================
         function renderTaiexDisplay(price, prevClose, high, low, timeLabel, explicitDiff = null) {
             const taiexEl = document.getElementById("taiexMainInfo");
@@ -661,11 +661,11 @@
             return true;
         }
 
-        async function fetchJsonWithTimeout(url, timeoutMs = 6000) {
+        async function fetchJsonDirect(url, timeoutMs = 6000) {
             const controller = new AbortController();
             const timer = setTimeout(() => controller.abort(), timeoutMs);
             try {
-                const res = await fetch(url, { signal: controller.signal });
+                const res = await fetch(url, { signal: controller.signal, cache: "no-store" });
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 return await res.json();
             } finally {
@@ -673,38 +673,30 @@
             }
         }
 
-        async function fetchViaProxies(targetUrl) {
-            const proxies = [
-                (u) => `https://corsproxy.io/?url=${encodeURIComponent(u)}`,
-                (u) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
-                (u) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`
-            ];
+        // 來源 1：鉅亨網 (cnyes) 盤中即時行情 API（原生支援瀏覽器 CORS，免經過任何代理伺服器）
+        async function tryFetchFromCnyes() {
+            const url = `https://ws.api.cnyes.com/ws/api/v1/charting/history?resolution=1&symbol=TWS:TSE01:INDEX&quote=1&_=${Date.now()}`;
+            const json = await fetchJsonDirect(url, 6000);
+            const data = json?.data;
+            if (!data) throw new Error("Empty cnyes data");
 
-            for (const buildProxy of proxies) {
-                try {
-                    const data = await fetchJsonWithTimeout(buildProxy(targetUrl), 6000);
-                    if (data) return data;
-                } catch (_) {
-                    // 嘗試下一個代理伺服器
-                }
-            }
-            throw new Error("All CORS proxies failed for " + targetUrl);
-        }
+            const quote = data.quote || {};
+            const cArr = Array.isArray(data.c) ? data.c : [];
+            const hArr = Array.isArray(data.h) ? data.h : [];
+            const lArr = Array.isArray(data.l) ? data.l : [];
+            const tArr = Array.isArray(data.t) ? data.t : [];
 
-        async function tryFetchFromYahoo() {
-            const yfUrl = `https://query1.finance.yahoo.com/v8/finance/chart/%5ETWII?interval=1m&range=1d&_=${Date.now()}`;
-            const yfData = await fetchViaProxies(yfUrl);
-            const meta = yfData?.chart?.result?.[0]?.meta;
-            if (!meta || !meta.regularMarketPrice) throw new Error("Invalid Yahoo Finance payload");
+            const price = parseFloat(quote["6"] ?? cArr[0]);
+            if (isNaN(price) || price <= 0) throw new Error("Invalid cnyes price");
 
-            const price = parseFloat(meta.regularMarketPrice);
-            const prevClose = parseFloat(meta.chartPreviousClose || meta.previousClose);
-            const high = parseFloat(meta.regularMarketDayHigh);
-            const low = parseFloat(meta.regularMarketDayLow);
+            const prevClose = parseFloat(quote["21"]);
+            const explicitDiff = quote["11"] !== undefined ? parseFloat(quote["11"]) : null;
+            const high = parseFloat(quote["12"] ?? (hArr.length > 0 ? Math.max(...hArr) : NaN));
+            const low = parseFloat(quote["13"] ?? (lArr.length > 0 ? Math.min(...lArr) : NaN));
 
             let timeLabel = "";
-            if (meta.regularMarketTime) {
-                const dt = new Date(meta.regularMarketTime * 1000);
+            if (tArr.length > 0 && tArr[0]) {
+                const dt = new Date(tArr[0] * 1000);
                 timeLabel = dt.toLocaleTimeString("zh-TW", {
                     timeZone: "Asia/Taipei",
                     hour12: false,
@@ -715,42 +707,20 @@
                 });
             }
 
-            if (isNaN(price) || price <= 0) throw new Error("Invalid price from Yahoo");
-            return { price, prevClose, high, low, timeLabel, explicitDiff: null };
+            return {
+                price,
+                prevClose: !isNaN(prevClose) && prevClose > 0 ? prevClose : null,
+                high: !isNaN(high) && high > 0 ? high : null,
+                low: !isNaN(low) && low > 0 ? low : null,
+                timeLabel,
+                explicitDiff: explicitDiff !== null && !isNaN(explicitDiff) ? explicitDiff : null
+            };
         }
 
-        async function tryFetchFromTwseMis() {
-            const twseUrl = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_t00.tw&json=1&delay=0&_=${Date.now()}`;
-            const parsed = await fetchViaProxies(twseUrl);
-            if (!parsed || !parsed.msgArray || parsed.msgArray.length === 0) {
-                throw new Error("Empty TWSE MIS msgArray");
-            }
-            const info = parsed.msgArray[0];
-            let current = parseFloat(info.z);
-            const prevClose = parseFloat(info.y);
-            const high = parseFloat(info.h);
-            const low = parseFloat(info.l);
-            const timeStr = info.t ? info.t.slice(0, 5) : "";
-
-            if (isNaN(current) || current <= 0) {
-                current = parseFloat(info.o);
-            }
-            if (isNaN(current) || current <= 0) {
-                current = prevClose;
-            }
-            if (isNaN(current) || current <= 0) throw new Error("Invalid TWSE MIS price");
-
-            return { price: current, prevClose, high, low, timeLabel: timeStr, explicitDiff: null };
-        }
-
+        // 來源 2：證交所 OpenAPI（原生支援瀏覽器 CORS，提供官方每日收盤指數）
         async function tryFetchFromTwseOpenApi() {
-            const openApiUrl = "https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK";
-            let rows = null;
-            try {
-                rows = await fetchJsonWithTimeout(openApiUrl, 6000);
-            } catch (_) {
-                rows = await fetchViaProxies(openApiUrl);
-            }
+            const url = `https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK?_=${Date.now()}`;
+            const rows = await fetchJsonDirect(url, 6000);
             if (!Array.isArray(rows) || rows.length === 0) throw new Error("Empty TWSE OpenAPI data");
 
             const latest = rows[rows.length - 1];
@@ -777,7 +747,7 @@
                 refreshIcon.classList.add("fa-spin");
             }
 
-            const sources = [tryFetchFromYahoo, tryFetchFromTwseMis, tryFetchFromTwseOpenApi];
+            const sources = [tryFetchFromCnyes, tryFetchFromTwseOpenApi];
 
             try {
                 let result = null;
@@ -786,7 +756,7 @@
                         result = await fetchSource();
                         if (result && result.price > 0) break;
                     } catch (_) {
-                        // 繼續嘗試下一個資料來源
+                        // 嘗試下一個直連資料來源
                     }
                 }
 
@@ -798,16 +768,15 @@
                     return;
                 }
 
-                throw new Error("All TAIEX sources failed");
+                throw new Error("All TAIEX direct sources failed");
             } catch (err) {
                 console.error("TAIEX fetch failed:", err);
-                // 若全部來源暫時失敗，嘗試讀取本地最近一次快取
                 try {
                     const cachedRaw = localStorage.getItem("taiex_last_cache");
                     if (cachedRaw) {
                         const cached = JSON.parse(cachedRaw);
                         if (renderTaiexDisplay(cached.price, cached.prevClose, cached.high, cached.low, `${cached.timeLabel || "先前"} 快取`, cached.explicitDiff)) {
-                            if (isManual) showToast("即時連線逾時，目前顯示最近一次快取報價");
+                            if (isManual) showToast("即時連線異常，目前顯示最近一次快取報價");
                             return;
                         }
                     }
@@ -819,6 +788,16 @@
             } finally {
                 if (refreshIcon) refreshIcon.classList.remove("fa-spin");
             }
+        }
+
+        function isTaiwanMarketOpen() {
+            const now = new Date();
+            const twStr = now.toLocaleString("en-US", { timeZone: "Asia/Taipei" });
+            const twDate = new Date(twStr);
+            const day = twDate.getDay(); // 0=日, 6=六
+            if (day === 0 || day === 6) return false;
+            const mins = twDate.getHours() * 60 + twDate.getMinutes();
+            return mins >= 535 && mins <= 820; // 08:55 ~ 13:40
         }
 
         // Firebase 配置
@@ -877,6 +856,13 @@
         function initApp() {
             fetchXinfengWeather(false);
             fetchTaiwanStockIndex(false);
+
+            // 台股交易時段每 30 秒自動即時更新大盤指數
+            setInterval(() => {
+                if (isTaiwanMarketOpen()) {
+                    fetchTaiwanStockIndex(false);
+                }
+            }, 30000);
 
             if (localStorage.getItem("team_expense_is_admin") === "true") {
                 isAdminLoggedIn = true;
