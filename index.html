@@ -59,6 +59,59 @@
 </head>
 <body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
 
+    <!-- Top Info Bar: 新竹縣新豐鄉天氣 + 台灣加權股價指數 (TAIEX) -->
+    <div id="topInfoBar" class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white border-b border-indigo-500/30 text-xs">
+        <div class="w-full max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8 py-2 flex flex-col xl:flex-row items-start xl:items-center justify-between gap-2">
+            
+            <!-- 左側：新竹縣新豐鄉當日與特殊天氣預報 -->
+            <div class="flex flex-wrap items-center justify-between sm:justify-start w-full xl:w-auto gap-x-3 gap-y-1.5">
+                <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                    <div class="flex items-center gap-1.5 font-semibold text-sky-300 shrink-0">
+                        <i class="fa-solid fa-location-dot text-rose-400"></i>
+                        <span>新豐鄉</span>
+                    </div>
+                    <div id="weatherMainInfo" class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-slate-100">
+                        <span class="flex items-center gap-1.5 text-slate-300">
+                            <i class="fa-solid fa-spinner fa-spin text-sky-400"></i> 載入氣象中...
+                        </span>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <div id="weatherAlertBadge" class="flex items-center gap-1.5 bg-white/10 text-slate-200 px-2 py-0.5 rounded-full border border-white/15 text-[11px]">
+                        <i class="fa-solid fa-shield-halved text-emerald-400"></i>
+                        <span>氣象偵測中</span>
+                    </div>
+                    <button onclick="fetchXinfengWeather(true)" class="text-slate-300 hover:text-white p-1 rounded transition" title="重新整理新豐鄉天氣">
+                        <i id="weatherRefreshIcon" class="fa-solid fa-arrows-rotate text-[11px]"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 分隔線 (僅寬螢幕顯示) -->
+            <div class="hidden xl:block h-4 w-px bg-indigo-500/30 shrink-0"></div>
+
+            <!-- 右側：今日台灣股票大盤指數 (加權指數 TAIEX) -->
+            <div class="flex flex-wrap items-center justify-between sm:justify-start xl:justify-end w-full xl:w-auto gap-x-3 gap-y-1 pt-1.5 xl:pt-0 border-t xl:border-t-0 border-white/10">
+                <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                    <div class="flex items-center gap-1.5 font-semibold text-amber-300 shrink-0">
+                        <i class="fa-solid fa-chart-line text-amber-400"></i>
+                        <span>台股大盤 (加權指數)</span>
+                    </div>
+                    <div id="taiexMainInfo" class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-slate-100">
+                        <span class="flex items-center gap-1.5 text-slate-300">
+                            <i class="fa-solid fa-spinner fa-spin text-amber-400"></i> 載入大盤指數中...
+                        </span>
+                    </div>
+                </div>
+                <button onclick="fetchTaiwanStockIndex(true)" class="text-slate-300 hover:text-white p-1 rounded transition shrink-0" title="重新整理台股大盤指數">
+                    <i id="taiexRefreshIcon" class="fa-solid fa-arrows-rotate text-[11px]"></i>
+                </button>
+            </div>
+
+        </div>
+    </div>
+
     <!-- Header / Navigation -->
     <header class="bg-indigo-700 text-white shadow-md sticky top-0 z-30">
         <div class="w-full max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-4 flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3">
@@ -175,7 +228,7 @@
 
         <!-- Desktop / Scrollable Table View -->
         <div id="tableViewContainer" class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex-1 flex flex-col min-h-[350px]">
-            <div class="overflow-auto flex-1 relative max-h-[calc(100vh-250px)] min-h-[300px]">
+            <div class="overflow-auto flex-1 relative max-h-[calc(100vh-300px)] min-h-[300px]">
                 <table id="expenseTable" class="min-w-max w-full text-left border-collapse text-xs sm:text-sm">
                     <thead>
                         <tr class="bg-slate-100 text-slate-700 border-b border-slate-200 sticky top-0 z-20 font-semibold select-none" id="tableHeaderRow">
@@ -455,6 +508,222 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
+        // ==========================================
+        // 1. 新竹縣新豐鄉氣象預報邏輯 (Open-Meteo API)
+        // ==========================================
+        function parseWmoCode(code) {
+            if (code === 0) return { desc: "晴朗無雲", icon: "fa-sun text-amber-300", isSevere: false };
+            if ([1, 2, 3].includes(code)) return { desc: "晴時多雲", icon: "fa-cloud-sun text-amber-200", isSevere: false };
+            if ([45, 48].includes(code)) return { desc: "有霧 / 能見度低", icon: "fa-smog text-slate-300", isSevere: true, alertText: "濃霧能見度低警示" };
+            if ([51, 53, 55, 61, 63, 80, 81].includes(code)) return { desc: "短暫陣雨", icon: "fa-cloud-rain text-sky-300", isSevere: false };
+            if ([65, 82].includes(code)) return { desc: "大雨 / 強陣雨", icon: "fa-cloud-showers-heavy text-blue-300", isSevere: true, alertText: "豪大雨特報警示" };
+            if ([95, 96, 99].includes(code)) return { desc: "雷陣雨", icon: "fa-cloud-bolt text-yellow-300", isSevere: true, alertText: "雷雨 / 強陣風警示" };
+            return { desc: "多雲時晴", icon: "fa-cloud text-slate-200", isSevere: false };
+        }
+
+        async function fetchXinfengWeather(isManual = false) {
+            const mainInfoEl = document.getElementById("weatherMainInfo");
+            const alertBadgeEl = document.getElementById("weatherAlertBadge");
+            const refreshIcon = document.getElementById("weatherRefreshIcon");
+
+            if (isManual && refreshIcon) {
+                refreshIcon.classList.add("fa-spin");
+            }
+
+            try {
+                const url = "https://api.open-meteo.com/v1/forecast?latitude=24.8996&longitude=120.9854&current=temperature_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max&timezone=Asia%2FTaipei&forecast_days=1";
+                const res = await fetch(url);
+                if (!res.ok) throw new Error("Weather API HTTP Error");
+                const data = await res.json();
+
+                const currentTemp = Math.round(data.current.temperature_2m);
+                const currentCode = data.current.weather_code;
+                const currentWind = Math.round(data.current.wind_speed_10m);
+
+                const maxTemp = Math.round(data.daily.temperature_2m_max[0]);
+                const minTemp = Math.round(data.daily.temperature_2m_min[0]);
+                const pop = data.daily.precipitation_probability_max[0] ?? 0;
+                const maxWind = Math.round(data.daily.wind_speed_10m_max[0] ?? currentWind);
+                const dailyCode = data.daily.weather_code[0];
+
+                const wInfo = parseWmoCode(currentCode);
+                const dailyWInfo = parseWmoCode(dailyCode);
+
+                mainInfoEl.innerHTML = `
+                    <span class="flex items-center gap-1 font-medium">
+                        <i class="fa-solid ${wInfo.icon}"></i>
+                        <span>${wInfo.desc}</span>
+                        <strong class="text-amber-300 font-mono text-xs sm:text-sm">${currentTemp}°C</strong>
+                    </span>
+                    <span class="text-slate-300 text-[11px]">
+                        (${minTemp}°~${maxTemp}°C)
+                    </span>
+                    <span class="flex items-center gap-1 text-sky-200 text-[11px]">
+                        <i class="fa-solid fa-umbrella text-sky-400"></i> <strong class="font-mono">${pop}%</strong>
+                    </span>
+                    <span class="flex items-center gap-1 text-teal-200 text-[11px]">
+                        <i class="fa-solid fa-wind text-teal-400"></i> <strong class="font-mono">${currentWind}</strong> km/h
+                    </span>
+                `;
+
+                let alerts = [];
+                if (wInfo.isSevere && wInfo.alertText) alerts.push(wInfo.alertText);
+                else if (dailyWInfo.isSevere && dailyWInfo.alertText) alerts.push(dailyWInfo.alertText);
+
+                if (maxWind >= 35 || currentWind >= 35) {
+                    alerts.push(`強風特報 (${Math.max(maxWind, currentWind)} km/h)`);
+                }
+                if (pop >= 60 && !alerts.some(a => a.includes("雨"))) {
+                    alerts.push(`高降雨機率 (${pop}%)`);
+                }
+                if (maxTemp >= 34) {
+                    alerts.push(`高溫警示 (${maxTemp}°C)`);
+                }
+                if (minTemp <= 13) {
+                    alerts.push(`低溫特報 (${minTemp}°C)`);
+                }
+
+                if (alerts.length > 0) {
+                    alertBadgeEl.className = "flex items-center gap-1 bg-amber-500/20 text-amber-200 px-2 py-0.5 rounded-full border border-amber-400/50 text-[11px] font-medium animate-pulse";
+                    alertBadgeEl.innerHTML = `
+                        <i class="fa-solid fa-triangle-exclamation text-amber-400"></i>
+                        <span>${alerts.join("、")}</span>
+                    `;
+                } else {
+                    alertBadgeEl.className = "flex items-center gap-1 bg-emerald-500/15 text-emerald-200 px-2 py-0.5 rounded-full border border-emerald-400/30 text-[11px]";
+                    alertBadgeEl.innerHTML = `
+                        <i class="fa-solid fa-circle-check text-emerald-400"></i>
+                        <span>無特殊天氣警示</span>
+                    `;
+                }
+
+                if (isManual) showToast("已更新新竹縣新豐鄉最新天氣預報");
+            } catch (err) {
+                console.error("Weather fetch failed:", err);
+                mainInfoEl.innerHTML = `<span class="text-slate-300 text-xs">暫無法取得即時氣象</span>`;
+                alertBadgeEl.className = "flex items-center gap-1 bg-white/10 text-slate-300 px-2 py-0.5 rounded-full border border-white/15 text-[11px]";
+                alertBadgeEl.innerHTML = `<i class="fa-solid fa-circle-info text-slate-400"></i><span>氣象連線異常</span>`;
+            } finally {
+                if (refreshIcon) refreshIcon.classList.remove("fa-spin");
+            }
+        }
+
+        // ==========================================
+        // 2. 今日台灣股票大盤指數 (加權指數 TAIEX)
+        // ==========================================
+        function renderTaiexDisplay(price, prevClose, high, low, timeLabel) {
+            const taiexEl = document.getElementById("taiexMainInfo");
+            if (!taiexEl || isNaN(price) || price <= 0) return false;
+
+            const diff = prevClose && !isNaN(prevClose) ? price - prevClose : 0;
+            const pct = prevClose && prevClose > 0 ? (diff / prevClose) * 100 : 0;
+
+            let colorClass = "text-slate-200";
+            let badgeBg = "bg-white/10 border-white/15 text-slate-200";
+            let arrowIcon = "—";
+
+            if (diff > 0.005) {
+                colorClass = "text-rose-400";
+                badgeBg = "bg-rose-500/20 border-rose-400/40 text-rose-300";
+                arrowIcon = "▲";
+            } else if (diff < -0.005) {
+                colorClass = "text-emerald-400";
+                badgeBg = "bg-emerald-500/20 border-emerald-400/40 text-emerald-300";
+                arrowIcon = "▼";
+            }
+
+            const formattedPrice = price.toLocaleString("zh-TW", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const formattedDiff = Math.abs(diff).toLocaleString("zh-TW", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const formattedPct = Math.abs(pct).toFixed(2);
+
+            let rangeHtml = "";
+            if (high && low && !isNaN(high) && !isNaN(low) && high > 0 && low > 0) {
+                rangeHtml = `
+                    <span class="text-slate-300 text-[11px] hidden sm:inline">
+                        高低 <span class="font-mono">${Math.round(low).toLocaleString()}~${Math.round(high).toLocaleString()}</span>
+                    </span>
+                `;
+            }
+
+            taiexEl.innerHTML = `
+                <strong class="font-mono text-xs sm:text-sm font-bold ${colorClass}">${formattedPrice}</strong>
+                <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded border font-mono text-[11px] font-semibold ${badgeBg}">
+                    <span>${arrowIcon} ${formattedDiff}</span>
+                    <span>(${diff >= 0 ? "+" : "-"}${formattedPct}%)</span>
+                </span>
+                ${rangeHtml}
+                ${timeLabel ? `<span class="text-slate-400 text-[10px] font-mono">(${timeLabel})</span>` : ""}
+            `;
+            return true;
+        }
+
+        async function fetchTaiwanStockIndex(isManual = false) {
+            const taiexEl = document.getElementById("taiexMainInfo");
+            const refreshIcon = document.getElementById("taiexRefreshIcon");
+
+            if (isManual && refreshIcon) {
+                refreshIcon.classList.add("fa-spin");
+            }
+
+            try {
+                const twseUrl = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_t00.tw&json=1&delay=0&_=${Date.now()}`;
+                const proxyUrl1 = `https://api.allorigins.win/get?url=${encodeURIComponent(twseUrl)}`;
+
+                const res1 = await fetch(proxyUrl1);
+                if (res1.ok) {
+                    const wrapper = await res1.json();
+                    const parsed = JSON.parse(wrapper.contents);
+                    if (parsed && parsed.msgArray && parsed.msgArray.length > 0) {
+                        const info = parsed.msgArray[0];
+                        let current = parseFloat(info.z);
+                        const prevClose = parseFloat(info.y);
+                        const high = parseFloat(info.h);
+                        const low = parseFloat(info.l);
+                        const timeStr = info.t ? info.t.slice(0, 5) : "";
+
+                        if (isNaN(current) || current <= 0) {
+                            current = parseFloat(info.o) || prevClose;
+                        }
+
+                        if (renderTaiexDisplay(current, prevClose, high, low, timeStr)) {
+                            if (isManual) showToast("已更新台股加權指數最新報價");
+                            return;
+                        }
+                    }
+                }
+                throw new Error("TWSE MIS fallback to Yahoo Finance");
+            } catch (err1) {
+                try {
+                    const yfUrl = `https://query1.finance.yahoo.com/v8/finance/chart/%5ETWII?interval=1d&range=2d`;
+                    const proxyUrl2 = `https://api.allorigins.win/get?url=${encodeURIComponent(yfUrl)}`;
+                    const res2 = await fetch(proxyUrl2);
+                    if (res2.ok) {
+                        const wrapper2 = await res2.json();
+                        const yfData = JSON.parse(wrapper2.contents);
+                        const meta = yfData?.chart?.result?.[0]?.meta;
+                        if (meta && meta.regularMarketPrice) {
+                            const price = parseFloat(meta.regularMarketPrice);
+                            const prevClose = parseFloat(meta.chartPreviousClose || meta.previousClose);
+                            const high = parseFloat(meta.regularMarketDayHigh);
+                            const low = parseFloat(meta.regularMarketDayLow);
+                            if (renderTaiexDisplay(price, prevClose, high, low, "Yahoo報價")) {
+                                if (isManual) showToast("已更新台股加權指數最新報價");
+                                return;
+                            }
+                        }
+                    }
+                    throw new Error("All stock sources failed");
+                } catch (err2) {
+                    console.error("TAIEX fetch failed:", err1, err2);
+                    if (taiexEl) {
+                        taiexEl.innerHTML = `<span class="text-slate-300 text-xs">暫無法取得大盤即時報價</span>`;
+                    }
+                }
+            } finally {
+                if (refreshIcon) refreshIcon.classList.remove("fa-spin");
+            }
+        }
+
         // Firebase 配置
         const firebaseConfig = {
             apiKey: "AIzaSyDICgwxG4eGVg_g3iQrAnHvGpVc0WFU3J0",
@@ -486,52 +755,8 @@
             { id: "col_10", title: "10月份個練費用", note: "十月份個人專項訓練課程費用" }
         ];
 
-        const INITIAL_MEMBERS = [
-            { id: "m_1", name: "何紹春", values: { col_1: 2500 } },
-            { id: "m_2", name: "徐芷喬", values: { col_1: 2500, col_2: 300 } },
-            { id: "m_3", name: "許珮旖", values: { col_1: 2500, col_3: 130, col_5: 480 } },
-            { id: "m_4", name: "周璘珊", values: { col_1: 2500, col_3: 130, col_5: 480, col_10: 1600 } },
-            { id: "m_5", name: "林澤宇", values: { col_1: 2500, col_3: 65, col_5: 240, col_10: 800 } },
-            { id: "m_6", name: "李唯碩", values: { col_1: 2500, col_5: 240 } },
-            { id: "m_7", name: "曾以家", values: { col_1: 2500, col_5: 240, col_10: 1200 } },
-            { id: "m_8", name: "陳子翔", values: { col_1: 2500, col_2: 300, col_3: 195, col_5: 480 } },
-            { id: "m_9", name: "邱子茱", values: { col_1: 2500, col_5: 240, col_10: 600 } },
-            { id: "m_10", name: "劉湘吟", values: { col_1: 2500, col_3: 130, col_5: 480 } },
-            { id: "m_11", name: "徐子晴", values: { col_1: 2500, col_3: 65, col_4: 90, col_5: 240 } },
-            { id: "m_12", name: "范皓銓", values: { col_1: 2500, col_5: 480, col_10: 1000 } },
-            { id: "m_13", name: "劉冬孜", values: { col_1: 2500, col_2: 300 } },
-            { id: "m_14", name: "劉仁皓", values: { col_1: 2500, col_3: 65, col_4: 90, col_7: 2633, col_8: 2768, col_10: 2400 } },
-            { id: "m_15", name: "莊至恩", values: { col_1: 2500, col_5: 240, col_7: 1473, col_10: 2400 } },
-            { id: "m_16", name: "廖沂清", values: { col_1: 2500, col_7: 993, col_10: 600 } },
-            { id: "m_17", name: "張可霓", values: { col_1: 2500, col_3: 65, col_7: 1473, col_10: 2200 } },
-            { id: "m_18", name: "林廷峰", values: { col_1: 2500, col_3: 130, col_4: 90, col_5: 240 } },
-            { id: "m_19", name: "胡恒睿", values: { col_1: 2500, col_3: 65, col_7: 1473 } },
-            { id: "m_20", name: "古易誠", values: { col_1: 2500, col_3: 65, col_7: 1473 } },
-            { id: "m_21", name: "李亦恩", values: { col_1: 2500, col_7: 993 } },
-            { id: "m_22", name: "葉恩彤", values: { col_1: 2500, col_2: 300, col_3: 65 } },
-            { id: "m_23", name: "郭宇澄", values: { col_1: 2500, col_2: 300, col_3: 130, col_7: 1473, col_8: 3382, col_9: -6982, col_10: 2400 } },
-            { id: "m_24", name: "陳秉侑", values: { col_1: 2500, col_3: 130, col_7: 1473, col_8: 2768 } },
-            { id: "m_25", name: "徐翊宸", values: { col_1: 2500, col_3: 165, col_4: 90 } },
-            { id: "m_26", name: "劉展誠", values: { col_1: 2500, col_2: 300, col_3: 340, col_6: 164, col_8: 680, col_9: -3695, col_10: 2000 } },
-            { id: "m_27", name: "敖姜宸", values: { col_1: 2500, col_3: 300, col_7: 1144, col_8: 3382, col_9: -403 } },
-            { id: "m_28", name: "溫泳玄", values: { col_1: 2500, col_2: 300, col_3: 165 } },
-            { id: "m_29", name: "鐘定丞", values: { col_1: 2500, col_2: 300, col_3: 230, col_4: 180, col_7: 1144, col_8: 3382, col_9: -3865, col_10: 1200 } },
-            { id: "m_30", name: "徐裕棋", values: { col_1: 2500, col_2: 300, col_3: 100, col_7: 1653, col_8: 4062 } },
-            { id: "m_31", name: "周書帆", values: { col_1: 2500, col_2: 300, col_3: 230, col_5: 480, col_7: 1144, col_8: 2768 } },
-            { id: "m_32", name: "楊翔宇", values: { col_1: 2500, col_3: 295, col_7: 2133, col_8: 3382 } },
-            { id: "m_33", name: "林昕璇", values: { col_1: 2500, col_3: 65, col_7: 1473, col_8: 3382 } },
-            { id: "m_34", name: "劉峻誠", values: { col_1: 2500, col_2: 300, col_3: 90, col_6: 370, col_7: 1144, col_8: 1368, col_10: 2000 } },
-            { id: "m_35", name: "葉旻游", values: { col_1: 2500, col_3: 90, col_7: 1653, col_8: 2662, col_10: 1200 } },
-            { id: "m_36", name: "黃宇樂", values: { col_1: 2500, col_3: 125, col_7: 1144, col_8: 2088, col_9: -2297 } },
-            { id: "m_37", name: "劉昇寬", values: { col_1: 2500, col_3: 90, col_7: 1653, col_8: 2662, col_10: 1800 } },
-            { id: "m_38", name: "黃歆甯", values: { col_1: 2500, col_2: 300, col_3: 100, col_6: 206, col_7: 993, col_8: 3382 } },
-            { id: "m_39", name: "郭哲宇", values: { col_1: 2500, col_2: 500, col_3: 90, col_6: 294, col_7: 1144, col_8: 2088 } },
-            { id: "m_40", name: "陳柏諺", values: { col_1: 2500, col_3: 135, col_7: 1144, col_8: 1368 } },
-            { id: "m_41", name: "郭友錡", values: { col_1: 2500, col_2: 500, col_3: 180, col_6: 221, col_7: 1144, col_8: 2088 } },
-            { id: "m_42", name: "吳佩瑄", values: { col_1: 2500, col_3: 90, col_7: 1473, col_8: 614 } },
-            { id: "m_43", name: "林邑達", values: { col_1: 2500, col_2: 500, col_3: 90, col_6: 370, col_7: 1144, col_8: 2088 } },
-            { id: "m_44", name: "劉宜菲", values: { col_1: 2500, col_2: 500, col_3: 90, col_6: 370, col_7: 1473, col_8: 614, col_10: 1200 } }
-        ];
+        // 隊員姓名與金額資訊完全由 Firestore 雲端資料庫讀取，不寫死於 HTML 原始碼中
+        const INITIAL_MEMBERS = [];
 
         let monthsData = {};
         let currentMonth = DEFAULT_MONTH_KEY;
@@ -553,6 +778,9 @@
         }
 
         function initApp() {
+            fetchXinfengWeather(false);
+            fetchTaiwanStockIndex(false);
+
             if (localStorage.getItem("team_expense_is_admin") === "true") {
                 isAdminLoggedIn = true;
             }
@@ -695,7 +923,7 @@
         }
 
         function setupFirestoreListener() {
-            updateSyncStatus("雲端同步中...", "fa-solid fa-rotate text-amber-300 animate-spin text-xs");
+            updateSyncStatus("從雲端載入名單中...", "fa-solid fa-rotate text-amber-300 animate-spin text-xs");
 
             onSnapshot(dataDocRef, (docSnap) => {
                 if (docSnap.metadata.hasPendingWrites) {
@@ -706,7 +934,6 @@
                 if (docSnap.exists()) {
                     const cloudData = docSnap.data();
                     if (cloudData && cloudData.monthsData) {
-                        // 依照雲端儲存的順序陣列進行排序，鎖定每個人看到的月份排序
                         if (cloudData.monthOrder && Array.isArray(cloudData.monthOrder)) {
                             let reorderedMonthsData = {};
                             cloudData.monthOrder.forEach(key => {
@@ -714,7 +941,6 @@
                                     reorderedMonthsData[key] = cloudData.monthsData[key];
                                 }
                             });
-                            // 防呆機制：補回未在 monthOrder 中的月份
                             Object.keys(cloudData.monthsData).forEach(key => {
                                 if (!reorderedMonthsData[key]) {
                                     reorderedMonthsData[key] = cloudData.monthsData[key];
@@ -743,8 +969,8 @@
                     }
                     updateSyncStatus("已即時同步至雲端", "fa-solid fa-cloud-check text-emerald-400 text-xs");
                 } else {
-                    saveState();
-                    updateSyncStatus("已即時同步至雲端", "fa-solid fa-cloud-check text-emerald-400 text-xs");
+                    // 雲端尚無資料時不自動寫入空白預設值，避免意外覆蓋雲端紀錄
+                    updateSyncStatus("雲端尚無資料 (請登入建立)", "fa-solid fa-cloud text-amber-300 text-xs");
                 }
             }, (error) => {
                 console.error("Firestore 同步失敗:", error);
@@ -797,7 +1023,7 @@
                 updateSyncStatus("儲存中...", "fa-solid fa-rotate text-amber-300 animate-spin text-xs");
                 await setDoc(dataDocRef, { 
                     monthsData,
-                    monthOrder: Object.keys(monthsData), // 將管理者拉動後的順序寫入雲端
+                    monthOrder: Object.keys(monthsData),
                     updatedAt: new Date().toISOString() 
                 });
                 updateSyncStatus("已即時同步至雲端", "fa-solid fa-cloud-check text-emerald-400 text-xs");
@@ -1303,7 +1529,7 @@
                 bodyHTML = `
                     <tr>
                         <td colspan="${columns.length + 5}" class="p-8 text-center text-slate-400">
-                            沒有找到相關的隊員資料
+                            ${members.length === 0 ? '正在從雲端資料庫載入隊員名單，或尚無隊員資料...' : '沒有找到相關的隊員資料'}
                         </td>
                     </tr>
                 `;
@@ -1384,7 +1610,7 @@
             const filteredMembers = members.filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
             if (filteredMembers.length === 0) {
-                container.innerHTML = `<div class="col-span-full p-8 text-center bg-white rounded-xl border text-slate-400">沒有找到相關隊員</div>`;
+                container.innerHTML = `<div class="col-span-full p-8 text-center bg-white rounded-xl border text-slate-400">${members.length === 0 ? '正在從雲端資料庫載入隊員名單，或尚無隊員資料...' : '沒有找到相關隊員'}</div>`;
                 return;
             }
 
@@ -1781,7 +2007,7 @@
                 return;
             }
 
-            const mode = selectedRadio.value; // 'replace' 或 'merge'
+            const mode = selectedRadio.value;
             const { jsonData, sheetName } = pendingImportData;
 
             closeImportOptionModal();
@@ -1949,6 +2175,8 @@
 
         // 全域 window 事件匯出
         Object.assign(window, {
+            fetchXinfengWeather,
+            fetchTaiwanStockIndex,
             handleAdminBtnClick,
             openAdminModal,
             closeAdminModal,
