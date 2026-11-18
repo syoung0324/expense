@@ -509,8 +509,20 @@
         import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         // ==========================================
-        // 1. 新竹縣新豐鄉氣象預報邏輯 (Open-Meteo API)
+        // 1. 新竹縣新豐鄉氣象預報邏輯 (多來源快取＋逾時切換)
         // ==========================================
+        async function fetchJsonDirect(url, timeoutMs = 5000) {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), timeoutMs);
+            try {
+                const res = await fetch(url, { signal: controller.signal, cache: "no-store" });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                return await res.json();
+            } finally {
+                clearTimeout(timer);
+            }
+        }
+
         function parseWmoCode(code) {
             if (code === 0) return { desc: "晴朗無雲", icon: "fa-sun text-amber-300", isSevere: false };
             if ([1, 2, 3].includes(code)) return { desc: "晴時多雲", icon: "fa-cloud-sun text-amber-200", isSevere: false };
@@ -519,6 +531,189 @@
             if ([65, 82].includes(code)) return { desc: "大雨 / 強陣雨", icon: "fa-cloud-showers-heavy text-blue-300", isSevere: true, alertText: "豪大雨特報警示" };
             if ([95, 96, 99].includes(code)) return { desc: "雷陣雨", icon: "fa-cloud-bolt text-yellow-300", isSevere: true, alertText: "雷雨 / 強陣風警示" };
             return { desc: "多雲時晴", icon: "fa-cloud text-slate-200", isSevere: false };
+        }
+
+        function parseMetNorwaySymbol(symbol) {
+            const s = String(symbol || "").toLowerCase();
+            if (s.includes("thunder")) return { desc: "雷陣雨", icon: "fa-cloud-bolt text-yellow-300", isSevere: true, alertText: "雷雨 / 強陣風警示" };
+            if (s.includes("heavyrain")) return { desc: "大雨 / 強陣雨", icon: "fa-cloud-showers-heavy text-blue-300", isSevere: true, alertText: "豪大雨特報警示" };
+            if (s.includes("rain") || s.includes("sleet")) return { desc: "短暫陣雨", icon: "fa-cloud-rain text-sky-300", isSevere: false };
+            if (s.includes("fog")) return { desc: "有霧 / 能見度低", icon: "fa-smog text-slate-300", isSevere: true, alertText: "濃霧能見度低警示" };
+            if (s.includes("clearsky")) return { desc: "晴朗無雲", icon: "fa-sun text-amber-300", isSevere: false };
+            if (s.includes("fair") || s.includes("partlycloudy")) return { desc: "晴時多雲", icon: "fa-cloud-sun text-amber-200", isSevere: false };
+            return { desc: "多雲時晴", icon: "fa-cloud text-slate-200", isSevere: false };
+        }
+
+        function renderXinfengWeather(wData, isCached = false) {
+            const mainInfoEl = document.getElementById("weatherMainInfo");
+            const alertBadgeEl = document.getElementById("weatherAlertBadge");
+            if (!mainInfoEl || !alertBadgeEl || !wData) return false;
+
+            const { currentTemp, minTemp, maxTemp, pop, currentWind, maxWind, wInfo, dailyWInfo, timeLabel } = wData;
+
+            const rangeText = (minTemp !== null && maxTemp !== null && !isNaN(minTemp) && !isNaN(maxTemp))
+                ? `<span class="text-slate-300 text-[11px]">(${minTemp}°~${maxTemp}°C)</span>`
+                : "";
+
+            const popText = (pop !== null && !isNaN(pop))
+                ? `<span class="flex items-center gap-1 text-sky-200 text-[11px]"><i class="fa-solid fa-umbrella text-sky-400"></i> <strong class="font-mono">${pop}%</strong></span>`
+                : "";
+
+            const windText = (currentWind !== null && !isNaN(currentWind))
+                ? `<span class="flex items-center gap-1 text-teal-200 text-[11px]"><i class="fa-solid fa-wind text-teal-400"></i> <strong class="font-mono">${currentWind}</strong> km/h</span>`
+                : "";
+
+            const timeTag = timeLabel
+                ? `<span class="text-slate-400 text-[10px] font-mono">(${timeLabel}${isCached ? " 快取" : ""})</span>`
+                : "";
+
+            mainInfoEl.innerHTML = `
+                <span class="flex items-center gap-1 font-medium">
+                    <i class="fa-solid ${wInfo.icon}"></i>
+                    <span>${wInfo.desc}</span>
+                    <strong class="text-amber-300 font-mono text-xs sm:text-sm">${currentTemp}°C</strong>
+                </span>
+                ${rangeText}
+                ${popText}
+                ${windText}
+                ${timeTag}
+            `;
+
+            let alerts = [];
+            if (wInfo.isSevere && wInfo.alertText) alerts.push(wInfo.alertText);
+            else if (dailyWInfo && dailyWInfo.isSevere && dailyWInfo.alertText) alerts.push(dailyWInfo.alertText);
+
+            const peakWind = Math.max(maxWind || 0, currentWind || 0);
+            if (peakWind >= 35) alerts.push(`強風特報 (${peakWind} km/h)`);
+            if (pop !== null && pop >= 60 && !alerts.some(a => a.includes("雨"))) alerts.push(`高降雨機率 (${pop}%)`);
+            if (maxTemp !== null && maxTemp >= 34) alerts.push(`高溫警示 (${maxTemp}°C)`);
+            if (minTemp !== null && minTemp <= 13) alerts.push(`低溫特報 (${minTemp}°C)`);
+
+            if (alerts.length > 0) {
+                alertBadgeEl.className = "flex items-center gap-1 bg-amber-500/20 text-amber-200 px-2 py-0.5 rounded-full border border-amber-400/50 text-[11px] font-medium animate-pulse";
+                alertBadgeEl.innerHTML = `
+                    <i class="fa-solid fa-triangle-exclamation text-amber-400"></i>
+                    <span>${alerts.join("、")}</span>
+                `;
+            } else {
+                alertBadgeEl.className = "flex items-center gap-1 bg-emerald-500/15 text-emerald-200 px-2 py-0.5 rounded-full border border-emerald-400/30 text-[11px]";
+                alertBadgeEl.innerHTML = `
+                    <i class="fa-solid fa-circle-check text-emerald-400"></i>
+                    <span>無特殊天氣警示</span>
+                `;
+            }
+            return true;
+        }
+
+        function getTaipeiNowTimeStr() {
+            return new Date().toLocaleTimeString("zh-TW", {
+                timeZone: "Asia/Taipei",
+                hour12: false,
+                hour: "2-digit",
+                minute: "2-digit"
+            });
+        }
+
+        // 來源 1：Open-Meteo（5 秒快速逾時）
+        async function tryWeatherFromOpenMeteo() {
+            const url = `https://api.open-meteo.com/v1/forecast?latitude=24.8996&longitude=120.9854&current=temperature_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max&timezone=Asia%2FTaipei&forecast_days=1&_=${Date.now()}`;
+            const data = await fetchJsonDirect(url, 5000);
+            if (!data?.current || !data?.daily) throw new Error("Invalid Open-Meteo payload");
+
+            return {
+                currentTemp: Math.round(data.current.temperature_2m),
+                maxTemp: Math.round(data.daily.temperature_2m_max[0]),
+                minTemp: Math.round(data.daily.temperature_2m_min[0]),
+                pop: data.daily.precipitation_probability_max[0] ?? 0,
+                currentWind: Math.round(data.current.wind_speed_10m),
+                maxWind: Math.round(data.daily.wind_speed_10m_max[0] ?? data.current.wind_speed_10m),
+                wInfo: parseWmoCode(data.current.weather_code),
+                dailyWInfo: parseWmoCode(data.daily.weather_code[0]),
+                timeLabel: getTaipeiNowTimeStr()
+            };
+        }
+
+        // 來源 2：MET Norway 挪威氣象局全球預報 API（原生支援 CORS、高速 CDN）
+        async function tryWeatherFromMetNorway() {
+            const url = `https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=24.8996&lon=120.9854`;
+            const data = await fetchJsonDirect(url, 5000);
+            const series = data?.properties?.timeseries;
+            if (!Array.isArray(series) || series.length === 0) throw new Error("Invalid MET Norway payload");
+
+            const nowEntry = series[0];
+            const details = nowEntry.data?.instant?.details || {};
+            const next1h = nowEntry.data?.next_1_hours || nowEntry.data?.next_6_hours || {};
+
+            const currentTemp = Math.round(details.air_temperature);
+            const windMs = parseFloat(details.wind_speed) || 0;
+            const currentWind = Math.round(windMs * 3.6);
+            const symbolCode = next1h.summary?.symbol_code || "partlycloudy_day";
+            const precipMm = parseFloat(next1h.details?.precipitation_amount ?? 0);
+
+            const next24 = series.slice(0, 24);
+            const temps = next24.map(item => item.data?.instant?.details?.air_temperature).filter(v => typeof v === "number");
+            const winds = next24.map(item => (item.data?.instant?.details?.wind_speed || 0) * 3.6);
+            const maxTemp = temps.length > 0 ? Math.round(Math.max(...temps)) : currentTemp;
+            const minTemp = temps.length > 0 ? Math.round(Math.min(...temps)) : currentTemp;
+            const maxWind = winds.length > 0 ? Math.round(Math.max(...winds)) : currentWind;
+
+            let pop = 10;
+            if (precipMm >= 2) pop = 80;
+            else if (precipMm > 0.2) pop = 60;
+            else if (symbolCode.includes("rain")) pop = 50;
+            else if (symbolCode.includes("cloudy")) pop = 20;
+
+            const wInfo = parseMetNorwaySymbol(symbolCode);
+            return {
+                currentTemp,
+                maxTemp,
+                minTemp,
+                pop,
+                currentWind,
+                maxWind,
+                wInfo,
+                dailyWInfo: wInfo,
+                timeLabel: getTaipeiNowTimeStr()
+            };
+        }
+
+        // 來源 3：wttr.in 全球即時氣象 JSON
+        async function tryWeatherFromWttr() {
+            const url = `https://wttr.in/24.8996,120.9854?format=j1`;
+            const data = await fetchJsonDirect(url, 5000);
+            const curr = data?.current_condition?.[0];
+            const today = data?.weather?.[0];
+            if (!curr) throw new Error("Invalid wttr.in payload");
+
+            const currentTemp = Math.round(parseFloat(curr.temp_C));
+            const currentWind = Math.round(parseFloat(curr.windspeedKmph) || 0);
+            const maxTemp = today ? Math.round(parseFloat(today.maxtempC)) : currentTemp;
+            const minTemp = today ? Math.round(parseFloat(today.mintempC)) : currentTemp;
+
+            const hourly = today?.hourly || [];
+            const pops = hourly.map(h => parseInt(h.chanceofrain, 10)).filter(n => !isNaN(n));
+            const pop = pops.length > 0 ? Math.max(...pops) : 15;
+
+            const descRaw = String(curr.weatherDesc?.[0]?.value || "").toLowerCase();
+            let wInfo = { desc: "多雲時晴", icon: "fa-cloud text-slate-200", isSevere: false };
+            if (descRaw.includes("thunder")) wInfo = { desc: "雷陣雨", icon: "fa-cloud-bolt text-yellow-300", isSevere: true, alertText: "雷雨 / 強陣風警示" };
+            else if (descRaw.includes("heavy rain")) wInfo = { desc: "大雨 / 強陣雨", icon: "fa-cloud-showers-heavy text-blue-300", isSevere: true, alertText: "豪大雨特報警示" };
+            else if (descRaw.includes("rain") || descRaw.includes("drizzle") || descRaw.includes("shower")) wInfo = { desc: "短暫陣雨", icon: "fa-cloud-rain text-sky-300", isSevere: false };
+            else if (descRaw.includes("fog") || descRaw.includes("mist")) wInfo = { desc: "有霧 / 能見度低", icon: "fa-smog text-slate-300", isSevere: true, alertText: "濃霧能見度低警示" };
+            else if (descRaw.includes("sunny") || descRaw.includes("clear")) wInfo = { desc: "晴朗無雲", icon: "fa-sun text-amber-300", isSevere: false };
+            else if (descRaw.includes("partly")) wInfo = { desc: "晴時多雲", icon: "fa-cloud-sun text-amber-200", isSevere: false };
+
+            return {
+                currentTemp,
+                maxTemp,
+                minTemp,
+                pop,
+                currentWind,
+                maxWind: currentWind,
+                wInfo,
+                dailyWInfo: wInfo,
+                timeLabel: getTaipeiNowTimeStr()
+            };
         }
 
         async function fetchXinfengWeather(isManual = false) {
@@ -530,79 +725,50 @@
                 refreshIcon.classList.add("fa-spin");
             }
 
+            // 首次開啟頁面時，先秒載本地快取避免顯示「載入中...」卡住
+            if (!isManual) {
+                try {
+                    const cachedRaw = localStorage.getItem("xinfeng_weather_cache");
+                    if (cachedRaw) {
+                        const cached = JSON.parse(cachedRaw);
+                        renderXinfengWeather(cached, true);
+                    }
+                } catch (_) {}
+            }
+
+            const sources = [tryWeatherFromOpenMeteo, tryWeatherFromMetNorway, tryWeatherFromWttr];
+
             try {
-                const url = "https://api.open-meteo.com/v1/forecast?latitude=24.8996&longitude=120.9854&current=temperature_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max&timezone=Asia%2FTaipei&forecast_days=1";
-                const res = await fetch(url);
-                if (!res.ok) throw new Error("Weather API HTTP Error");
-                const data = await res.json();
-
-                const currentTemp = Math.round(data.current.temperature_2m);
-                const currentCode = data.current.weather_code;
-                const currentWind = Math.round(data.current.wind_speed_10m);
-
-                const maxTemp = Math.round(data.daily.temperature_2m_max[0]);
-                const minTemp = Math.round(data.daily.temperature_2m_min[0]);
-                const pop = data.daily.precipitation_probability_max[0] ?? 0;
-                const maxWind = Math.round(data.daily.wind_speed_10m_max[0] ?? currentWind);
-                const dailyCode = data.daily.weather_code[0];
-
-                const wInfo = parseWmoCode(currentCode);
-                const dailyWInfo = parseWmoCode(dailyCode);
-
-                mainInfoEl.innerHTML = `
-                    <span class="flex items-center gap-1 font-medium">
-                        <i class="fa-solid ${wInfo.icon}"></i>
-                        <span>${wInfo.desc}</span>
-                        <strong class="text-amber-300 font-mono text-xs sm:text-sm">${currentTemp}°C</strong>
-                    </span>
-                    <span class="text-slate-300 text-[11px]">
-                        (${minTemp}°~${maxTemp}°C)
-                    </span>
-                    <span class="flex items-center gap-1 text-sky-200 text-[11px]">
-                        <i class="fa-solid fa-umbrella text-sky-400"></i> <strong class="font-mono">${pop}%</strong>
-                    </span>
-                    <span class="flex items-center gap-1 text-teal-200 text-[11px]">
-                        <i class="fa-solid fa-wind text-teal-400"></i> <strong class="font-mono">${currentWind}</strong> km/h
-                    </span>
-                `;
-
-                let alerts = [];
-                if (wInfo.isSevere && wInfo.alertText) alerts.push(wInfo.alertText);
-                else if (dailyWInfo.isSevere && dailyWInfo.alertText) alerts.push(dailyWInfo.alertText);
-
-                if (maxWind >= 35 || currentWind >= 35) {
-                    alerts.push(`強風特報 (${Math.max(maxWind, currentWind)} km/h)`);
-                }
-                if (pop >= 60 && !alerts.some(a => a.includes("雨"))) {
-                    alerts.push(`高降雨機率 (${pop}%)`);
-                }
-                if (maxTemp >= 34) {
-                    alerts.push(`高溫警示 (${maxTemp}°C)`);
-                }
-                if (minTemp <= 13) {
-                    alerts.push(`低溫特報 (${minTemp}°C)`);
+                let result = null;
+                for (const fetchSource of sources) {
+                    try {
+                        result = await fetchSource();
+                        if (result && !isNaN(result.currentTemp)) break;
+                    } catch (_) {
+                        // 逾時或失敗時立即切換下一個高速氣象來源
+                    }
                 }
 
-                if (alerts.length > 0) {
-                    alertBadgeEl.className = "flex items-center gap-1 bg-amber-500/20 text-amber-200 px-2 py-0.5 rounded-full border border-amber-400/50 text-[11px] font-medium animate-pulse";
-                    alertBadgeEl.innerHTML = `
-                        <i class="fa-solid fa-triangle-exclamation text-amber-400"></i>
-                        <span>${alerts.join("、")}</span>
-                    `;
-                } else {
-                    alertBadgeEl.className = "flex items-center gap-1 bg-emerald-500/15 text-emerald-200 px-2 py-0.5 rounded-full border border-emerald-400/30 text-[11px]";
-                    alertBadgeEl.innerHTML = `
-                        <i class="fa-solid fa-circle-check text-emerald-400"></i>
-                        <span>無特殊天氣警示</span>
-                    `;
+                if (result && renderXinfengWeather(result, false)) {
+                    try {
+                        localStorage.setItem("xinfeng_weather_cache", JSON.stringify(result));
+                    } catch (_) {}
+                    if (isManual) showToast("已更新新竹縣新豐鄉最新天氣預報");
+                    return;
                 }
 
-                if (isManual) showToast("已更新新竹縣新豐鄉最新天氣預報");
+                throw new Error("All weather sources failed");
             } catch (err) {
                 console.error("Weather fetch failed:", err);
-                mainInfoEl.innerHTML = `<span class="text-slate-300 text-xs">暫無法取得即時氣象</span>`;
-                alertBadgeEl.className = "flex items-center gap-1 bg-white/10 text-slate-300 px-2 py-0.5 rounded-full border border-white/15 text-[11px]";
-                alertBadgeEl.innerHTML = `<i class="fa-solid fa-circle-info text-slate-400"></i><span>氣象連線異常</span>`;
+                // 若已有快取畫面則保留快取，不覆蓋為錯誤訊息
+                const hasCached = !!localStorage.getItem("xinfeng_weather_cache");
+                if (!hasCached) {
+                    mainInfoEl.innerHTML = `<span class="text-slate-300 text-xs">暫無法取得即時氣象</span>`;
+                    alertBadgeEl.className = "flex items-center gap-1 bg-white/10 text-slate-300 px-2 py-0.5 rounded-full border border-white/15 text-[11px]";
+                    alertBadgeEl.innerHTML = `<i class="fa-solid fa-circle-info text-slate-400"></i><span>氣象連線異常</span>`;
+                } else if (isManual) {
+                    showToast("目前網路延遲，已保留最近一次氣象資料");
+                }
             } finally {
                 if (refreshIcon) refreshIcon.classList.remove("fa-spin");
             }
@@ -661,22 +827,10 @@
             return true;
         }
 
-        async function fetchJsonDirect(url, timeoutMs = 6000) {
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), timeoutMs);
-            try {
-                const res = await fetch(url, { signal: controller.signal, cache: "no-store" });
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                return await res.json();
-            } finally {
-                clearTimeout(timer);
-            }
-        }
-
-        // 來源 1：鉅亨網 (cnyes) 盤中即時行情 API（原生支援瀏覽器 CORS，免經過任何代理伺服器）
+        // 來源 1：鉅亨網 (cnyes) 盤中即時行情 API（原生支援瀏覽器 CORS）
         async function tryFetchFromCnyes() {
             const url = `https://ws.api.cnyes.com/ws/api/v1/charting/history?resolution=1&symbol=TWS:TSE01:INDEX&quote=1&_=${Date.now()}`;
-            const json = await fetchJsonDirect(url, 6000);
+            const json = await fetchJsonDirect(url, 5000);
             const data = json?.data;
             if (!data) throw new Error("Empty cnyes data");
 
@@ -717,10 +871,10 @@
             };
         }
 
-        // 來源 2：證交所 OpenAPI（原生支援瀏覽器 CORS，提供官方每日收盤指數）
+        // 來源 2：證交所 OpenAPI（原生支援瀏覽器 CORS）
         async function tryFetchFromTwseOpenApi() {
             const url = `https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK?_=${Date.now()}`;
-            const rows = await fetchJsonDirect(url, 6000);
+            const rows = await fetchJsonDirect(url, 5000);
             if (!Array.isArray(rows) || rows.length === 0) throw new Error("Empty TWSE OpenAPI data");
 
             const latest = rows[rows.length - 1];
@@ -747,6 +901,16 @@
                 refreshIcon.classList.add("fa-spin");
             }
 
+            if (!isManual) {
+                try {
+                    const cachedRaw = localStorage.getItem("taiex_last_cache");
+                    if (cachedRaw) {
+                        const cached = JSON.parse(cachedRaw);
+                        renderTaiexDisplay(cached.price, cached.prevClose, cached.high, cached.low, `${cached.timeLabel || "先前"} 快取`, cached.explicitDiff);
+                    }
+                } catch (_) {}
+            }
+
             const sources = [tryFetchFromCnyes, tryFetchFromTwseOpenApi];
 
             try {
@@ -771,19 +935,11 @@
                 throw new Error("All TAIEX direct sources failed");
             } catch (err) {
                 console.error("TAIEX fetch failed:", err);
-                try {
-                    const cachedRaw = localStorage.getItem("taiex_last_cache");
-                    if (cachedRaw) {
-                        const cached = JSON.parse(cachedRaw);
-                        if (renderTaiexDisplay(cached.price, cached.prevClose, cached.high, cached.low, `${cached.timeLabel || "先前"} 快取`, cached.explicitDiff)) {
-                            if (isManual) showToast("即時連線異常，目前顯示最近一次快取報價");
-                            return;
-                        }
-                    }
-                } catch (_) {}
-
-                if (taiexEl) {
+                const hasCached = !!localStorage.getItem("taiex_last_cache");
+                if (!hasCached && taiexEl) {
                     taiexEl.innerHTML = `<span class="text-slate-300 text-xs">暫無法取得大盤即時報價</span>`;
+                } else if (isManual) {
+                    showToast("即時連線異常，目前顯示最近一次快取報價");
                 }
             } finally {
                 if (refreshIcon) refreshIcon.classList.remove("fa-spin");
@@ -794,10 +950,10 @@
             const now = new Date();
             const twStr = now.toLocaleString("en-US", { timeZone: "Asia/Taipei" });
             const twDate = new Date(twStr);
-            const day = twDate.getDay(); // 0=日, 6=六
+            const day = twDate.getDay();
             if (day === 0 || day === 6) return false;
             const mins = twDate.getHours() * 60 + twDate.getMinutes();
-            return mins >= 535 && mins <= 820; // 08:55 ~ 13:40
+            return mins >= 535 && mins <= 820;
         }
 
         // Firebase 配置
@@ -856,6 +1012,11 @@
         function initApp() {
             fetchXinfengWeather(false);
             fetchTaiwanStockIndex(false);
+
+            // 每 15 分鐘背景自動刷新新豐鄉天氣預報
+            setInterval(() => {
+                fetchXinfengWeather(false);
+            }, 15 * 60 * 1000);
 
             // 台股交易時段每 30 秒自動即時更新大盤指數
             setInterval(() => {
