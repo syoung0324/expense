@@ -123,8 +123,11 @@ function loadFromLocalStorage() {
         const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
         if (raw) {
             const parsed = JSON.parse(raw);
-            if (parsed && parsed.months && Array.isArray(parsed.monthOrder) && parsed.monthOrder.length > 0) {
-                return parsed;
+            if (parsed && parsed.months && Object.keys(parsed.months).length > 0) {
+                const order = Array.isArray(parsed.monthOrder) && parsed.monthOrder.length > 0
+                    ? parsed.monthOrder
+                    : Object.keys(parsed.months);
+                return { monthOrder: order, months: parsed.months };
             }
         }
     } catch (e) {
@@ -178,9 +181,12 @@ function initFirebaseAndData() {
             async (snap) => {
                 if (snap.exists()) {
                     const cloud = snap.data();
-                    if (cloud.months && Array.isArray(cloud.monthOrder) && cloud.monthOrder.length > 0) {
+                    if (cloud && cloud.months && Object.keys(cloud.months).length > 0) {
+                        const order = Array.isArray(cloud.monthOrder) && cloud.monthOrder.length > 0
+                            ? cloud.monthOrder
+                            : Object.keys(cloud.months);
                         appData = {
-                            monthOrder: cloud.monthOrder,
+                            monthOrder: order,
                             months: cloud.months
                         };
                         localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(appData));
@@ -202,6 +208,7 @@ function initFirebaseAndData() {
                 console.error("Firestore 監聽異常:", err);
                 useCloudSync = false;
                 updateSyncBadge("local", "離線 / 本機模式");
+                showToast("Firestore 連線失敗，請檢查網路或權限規則", "error");
             }
         );
     } catch (e) {
@@ -212,7 +219,7 @@ function initFirebaseAndData() {
 }
 
 // ==========================================
-// 4. 管理者權限控制（支援 Firestore 後端密碼驗證）
+// 4. 管理者權限控制（與 Firestore admin_config 驗證）
 // ==========================================
 function updateAdminUI() {
     const adminBtnText = document.getElementById("adminBtnText");
@@ -269,21 +276,29 @@ async function checkAdminPassword() {
 
     let validPassword = null;
 
-    // 優先從共用的 adminDocRef (config/admin) 讀取密碼
-    if (useCloudSync && db) {
+    // 從 Firestore (expense_tracker/admin_config) 讀取管理者密碼
+    if (db) {
         try {
             const adminDoc = await getDoc(adminDocRef);
-            if (adminDoc.exists() && adminDoc.data().password) {
-                validPassword = String(adminDoc.data().password);
+            if (adminDoc.exists()) {
+                const data = adminDoc.data();
+                const rawPwd = data.password ?? data.adminPassword ?? data.pwd;
+                if (rawPwd !== undefined && rawPwd !== null && String(rawPwd).trim() !== "") {
+                    validPassword = String(rawPwd).trim();
+                }
+            } else {
+                console.warn("Firestore 中找不到 expense_tracker/admin_config 文件");
             }
         } catch (e) {
-            console.warn("讀取雲端管理者設定失敗:", e);
+            console.error("讀取 Firestore 管理者設定失敗:", e);
+            showToast("無法連線至 Firestore 驗證密碼", "error");
+            return;
         }
     }
 
-    // 若尚未設定 Firestore 密碼文件時的備援比對
     if (!validPassword) {
-        validPassword = localStorage.getItem("custom_admin_pwd") || "admin1234";
+        showToast("雲端尚未設定管理者密碼 (expense_tracker/admin_config)", "error");
+        return;
     }
 
     if (pwd === validPassword) {

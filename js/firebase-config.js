@@ -5,7 +5,7 @@ import { getFirestore, doc } from "https://www.gstatic.com/firebasejs/10.12.2/fi
 // Firebase 集中配置（供全站模組共用）
 // ==========================================
 export const firebaseConfig = {
-    apiKey: "AIzaSyDIcgwxG4eGVg_g3iQrAnHvGpVc0WFU3J0",
+    apiKey: "AIzaSyDICgwxG4eGVg_g3iQrAnHvGpVc0WFU3J0",
     authDomain: "expense-ddcfe.firebaseapp.com",
     projectId: "expense-ddcfe",
     storageBucket: "expense-ddcfe.firebasestorage.app",
@@ -13,15 +13,14 @@ export const firebaseConfig = {
     appId: "1:457060907844:web:1574ec3ffa204cd4383511"
 };
 
-// 初始化 Firebase & Firestore 實例
+// 初始化 Firebase & Firestore
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 
-// 共用 Firestore 文件參照（沿用現有資料路徑）
-export const dataDocRef = doc(db, "expenseTracker", "mainData");
-export const adminDocRef = doc(db, "config", "admin");
+// 共用 Firestore 文件參照（對應您原本的資料庫路徑）
+export const dataDocRef = doc(db, "expense_tracker", "main_data");
+export const adminDocRef = doc(db, "expense_tracker", "admin_config");
 
-// 預設常數設定
 export const DEFAULT_MONTH_KEY = "2026年11月";
 
 export const INITIAL_COLUMNS = [
