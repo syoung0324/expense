@@ -70,6 +70,31 @@
         </div>
     </div>
 
+    <!-- 新增：台灣熱門即時新聞跑馬燈模組 -->
+    <div id="newsTickerBar" class="bg-slate-950 text-slate-100 border-b border-indigo-500/30 text-xs overflow-hidden">
+        <div class="w-full max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8 py-1.5 flex items-center gap-2 sm:gap-3">
+            <!-- 左側標籤 -->
+            <div class="flex items-center gap-1.5 bg-rose-600 text-white font-bold px-2 py-0.5 rounded text-[11px] shrink-0 shadow-sm">
+                <i class="fa-solid fa-fire-flame-curved text-amber-200 animate-pulse"></i>
+                <span>台灣熱門新聞</span>
+            </div>
+
+            <!-- 中間跑馬燈軌道 -->
+            <div class="news-marquee-wrapper flex-1 overflow-hidden relative">
+                <div id="newsMarqueeTrack" class="news-marquee-track flex items-center gap-8 whitespace-nowrap">
+                    <span class="text-slate-400 flex items-center gap-1.5">
+                        <i class="fa-solid fa-spinner fa-spin text-rose-400"></i> 正在載入台灣最新焦點新聞...
+                    </span>
+                </div>
+            </div>
+
+            <!-- 右側手動更新按鈕 -->
+            <button onclick="fetchTaiwanHotNews(true)" class="text-slate-400 hover:text-white p-1 rounded transition shrink-0" title="重新整理台灣熱門新聞">
+                <i id="newsRefreshIcon" class="fa-solid fa-arrows-rotate text-[11px]"></i>
+            </button>
+        </div>
+    </div>
+
     <!-- Header / Navigation -->
     <header class="bg-indigo-700 text-white shadow-md sticky top-0 z-30">
         <div class="w-full max-w-[1600px] mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-4 flex flex-col md:flex-row justify-between items-stretch md:items-center gap-3">
