@@ -48,3 +48,29 @@ body {
     right: 0;
     z-index: 10;
 }
+
+/* 台灣熱門新聞跑馬燈動畫 */
+.news-marquee-wrapper {
+    mask-image: linear-gradient(to right, transparent 0%, black 2%, black 98%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, transparent 0%, black 2%, black 98%, transparent 100%);
+}
+
+.news-marquee-track {
+    display: inline-flex;
+    width: max-content;
+    animation: newsTickerScroll var(--marquee-duration, 45s) linear infinite;
+}
+
+.news-marquee-wrapper:hover .news-marquee-track,
+.news-marquee-track:active {
+    animation-play-state: paused;
+}
+
+@keyframes newsTickerScroll {
+    0% {
+        transform: translateX(0);
+    }
+    100% {
+        transform: translateX(-50%);
+    }
+}
