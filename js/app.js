@@ -1,5 +1,6 @@
 import { setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 import { dataDocRef, adminDocRef, DEFAULT_MONTH_KEY, INITIAL_COLUMNS, INITIAL_MEMBERS } from "./firebase-config.js";
+import { fetchXinfengWeather, fetchTaiwanStockIndex, fetchTaiwanHotNews } from "./widgets.js";
 import { fetchXinfengWeather, fetchTaiwanStockIndex } from "./widgets.js";
 
 let monthsData = {};
@@ -24,6 +25,9 @@ function updateSyncStatus(text, iconClass) {
 function initApp() {
     fetchXinfengWeather(false, showToast);
     fetchTaiwanStockIndex(false, showToast);
+    fetchXinfengWeather(false, showToast);
+    fetchTaiwanStockIndex(false, showToast);
+    fetchTaiwanHotNews(false, showToast);
 
     if (localStorage.getItem("team_expense_is_admin") === "true") {
         isAdminLoggedIn = true;
@@ -1380,6 +1384,9 @@ function showToast(message) {
 
 // 掛載至 window 供 HTML 行內事件呼叫
 Object.assign(window, {
+    fetchXinfengWeather: (isManual) => fetchXinfengWeather(isManual, showToast),
+    fetchTaiwanStockIndex: (isManual) => fetchTaiwanStockIndex(isManual, showToast),
+    fetchTaiwanHotNews: (isManual) => fetchTaiwanHotNews(isManual, showToast),
     fetchXinfengWeather: (isManual) => fetchXinfengWeather(isManual, showToast),
     fetchTaiwanStockIndex: (isManual) => fetchTaiwanStockIndex(isManual, showToast),
     handleAdminBtnClick,
