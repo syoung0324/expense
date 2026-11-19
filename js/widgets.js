@@ -116,6 +116,8 @@ export async function fetchXinfengWeather(isManual = false, notifyCallback = nul
 // 2. 今日台灣股票大盤指數 (多源並行競速架構)
 // ==========================================
 const TAIEX_CACHE_KEY = "taiex_last_quote_cache_v2";
+
+// 若您有部署下方的 Google Apps Script 專屬代理網址，可貼在這裡作為最優先通道
 const CUSTOM_GAS_TAIEX_URL = "";
 
 function renderTaiexDisplay(quote) {
@@ -165,6 +167,7 @@ function renderTaiexDisplay(quote) {
     return true;
 }
 
+// 路線 A：自建 Google Apps Script 通道 (若有設定)
 async function fetchFromCustomGas() {
     if (!CUSTOM_GAS_TAIEX_URL) throw new Error("No GAS URL");
     const res = await fetchWithTimeout(CUSTOM_GAS_TAIEX_URL, 6000);
@@ -174,6 +177,7 @@ async function fetchFromCustomGas() {
     return data;
 }
 
+// 路線 B：免代理直連 - 臺灣證券交易所 OpenAPI
 async function fetchFromTwseDirect() {
     const res = await fetchWithTimeout("https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK", 6000);
     if (!res.ok) throw new Error("TWSE direct HTTP error");
@@ -195,6 +199,7 @@ async function fetchFromTwseDirect() {
     };
 }
 
+// 路線 C：免代理直連 - FinMind 台灣股市開放資料 API (原生支援 CORS)
 async function fetchFromFinMindDirect() {
     const d = new Date();
     d.setDate(d.getDate() - 10);
@@ -222,6 +227,7 @@ async function fetchFromFinMindDirect() {
     };
 }
 
+// 路線 D：JSONP (<script> 標籤注入，完全繞過瀏覽器 CORS 限制)
 function fetchFromJsonpEastMoney() {
     return new Promise((resolve, reject) => {
         const cbName = "taiex_jsonp_" + Date.now() + "_" + Math.floor(Math.random() * 1000);
@@ -242,6 +248,7 @@ function fetchFromJsonpEastMoney() {
             try {
                 const d = res?.data;
                 if (!d || !d.f43) return reject(new Error("Empty JSONP data"));
+                // f43=最新價, f44=最高, f45=最低, f60=昨收 (數值放大 100 倍)
                 const price = Number(d.f43) / 100;
                 const prevClose = d.f60 ? Number(d.f60) / 100 : price;
                 const high = d.f44 ? Number(d.f44) / 100 : null;
@@ -264,6 +271,7 @@ function fetchFromJsonpEastMoney() {
     });
 }
 
+// 路線 E：Yahoo Finance 多代理並行
 function parseYahooData(yfData) {
     const meta = yfData?.chart?.result?.[0]?.meta;
     if (!meta || !meta.regularMarketPrice) return null;
@@ -311,6 +319,7 @@ export async function fetchTaiwanStockIndex(isManual = false, notifyCallback = n
         refreshIcon.classList.add("fa-spin");
     }
 
+    // 先讀取本地快取避免畫面空白
     const cachedRaw = localStorage.getItem(TAIEX_CACHE_KEY);
     let hasRenderedCache = false;
     if (cachedRaw && !isManual) {
@@ -321,6 +330,7 @@ export async function fetchTaiwanStockIndex(isManual = false, notifyCallback = n
     }
 
     try {
+        // 同時發出所有資料來源請求，取最先成功回傳的結果
         const tasks = [
             fetchFromJsonpEastMoney(),
             fetchFromFinMindDirect(),
@@ -345,166 +355,6 @@ export async function fetchTaiwanStockIndex(isManual = false, notifyCallback = n
             taiexEl.innerHTML = `<span class="text-slate-300 text-xs">暫無法取得大盤報價（請稍後點擊右側重整）</span>`;
         } else if (isManual && notifyCallback) {
             notifyCallback("目前連線受限，顯示最近一次大盤報價");
-        }
-    } finally {
-        if (refreshIcon) refreshIcon.classList.remove("fa-spin");
-    }
-}
-
-// ==========================================
-// 3. 台灣熱門即時新聞跑馬燈模組 (Google News TW RSS)
-// ==========================================
-const NEWS_CACHE_KEY = "taiwan_hot_news_cache_v1";
-
-function escapeHtml(str) {
-    return String(str)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;");
-}
-
-function renderNewsMarquee(newsItems) {
-    const trackEl = document.getElementById("newsMarqueeTrack");
-    if (!trackEl || !Array.isArray(newsItems) || newsItems.length === 0) return false;
-
-    const singleSetHtml = newsItems.map((item, idx) => `
-        <a href="${escapeHtml(item.link)}" target="_blank" rel="noopener noreferrer"
-           class="inline-flex items-center gap-1.5 text-slate-200 hover:text-amber-300 transition group">
-            <span class="bg-indigo-800/80 text-indigo-200 border border-indigo-500/40 font-mono text-[10px] px-1.5 py-0.2 rounded">
-                ${idx + 1}
-            </span>
-            <span class="group-hover:underline underline-offset-2">${escapeHtml(item.title)}</span>
-            ${item.source ? `<span class="text-slate-400 text-[11px]">[${escapeHtml(item.source)}]</span>` : ""}
-        </a>
-    `).join(`<span class="text-slate-600 select-none">•</span>`);
-
-    // 複製兩份串接以達成無縫循環滾動效果
-    trackEl.innerHTML = `
-        <div class="inline-flex items-center gap-6 pr-6">${singleSetHtml}</div>
-        <div class="inline-flex items-center gap-6 pr-6" aria-hidden="true">${singleSetHtml}</div>
-    `;
-
-    // 依據新聞數量動態調整捲動總秒數，保持閱讀速度適中
-    const durationSec = Math.max(35, newsItems.length * 6);
-    trackEl.style.setProperty("--marquee-duration", `${durationSec}s`);
-    return true;
-}
-
-function parseRssXmlText(xmlText) {
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(xmlText, "text/xml");
-    const items = Array.from(xmlDoc.querySelectorAll("item")).slice(0, 15);
-    if (items.length === 0) throw new Error("No RSS items found");
-
-    return items.map(item => {
-        const rawTitle = item.querySelector("title")?.textContent?.trim() || "";
-        const link = item.querySelector("link")?.textContent?.trim() || "https://news.google.com/?hl=zh-TW&gl=TW&ceid=TW:zh-Hant";
-        const sourceTag = item.querySelector("source")?.textContent?.trim() || "";
-
-        // Google News 標題通常格式為「新聞標題 - 媒體名稱」，拆開讓版面更乾淨
-        let cleanTitle = rawTitle;
-        let source = sourceTag;
-        const lastDashIdx = rawTitle.lastIndexOf(" - ");
-        if (lastDashIdx > 0) {
-            cleanTitle = rawTitle.substring(0, lastDashIdx).trim();
-            if (!source) source = rawTitle.substring(lastDashIdx + 3).trim();
-        }
-        return { title: cleanTitle, link, source };
-    }).filter(n => n.title.length > 0);
-}
-
-async function fetchNewsFromRss2Json(rssUrl) {
-    const api = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(rssUrl)}`;
-    const res = await fetchWithTimeout(api, 6000);
-    if (!res.ok) throw new Error("rss2json HTTP error");
-    const data = await res.json();
-    if (data.status !== "ok" || !Array.isArray(data.items) || data.items.length === 0) {
-        throw new Error("rss2json empty");
-    }
-    return data.items.slice(0, 15).map(item => {
-        const rawTitle = (item.title || "").trim();
-        const lastDashIdx = rawTitle.lastIndexOf(" - ");
-        let cleanTitle = rawTitle;
-        let source = item.author || "";
-        if (lastDashIdx > 0) {
-            cleanTitle = rawTitle.substring(0, lastDashIdx).trim();
-            if (!source) source = rawTitle.substring(lastDashIdx + 3).trim();
-        }
-        return {
-            title: cleanTitle,
-            link: item.link || "https://news.google.com/?hl=zh-TW&gl=TW&ceid=TW:zh-Hant",
-            source
-        };
-    }).filter(n => n.title.length > 0);
-}
-
-async function fetchNewsFromXmlProxy(proxyType, rssUrl) {
-    let url = "";
-    if (proxyType === "allorigins") {
-        url = `https://api.allorigins.win/get?url=${encodeURIComponent(rssUrl)}`;
-    } else if (proxyType === "corsproxy") {
-        url = `https://corsproxy.io/?${encodeURIComponent(rssUrl)}`;
-    } else {
-        url = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(rssUrl)}`;
-    }
-
-    const res = await fetchWithTimeout(url, 6000);
-    if (!res.ok) throw new Error(`News proxy ${proxyType} HTTP error`);
-
-    let xmlText = "";
-    if (proxyType === "allorigins") {
-        const json = await res.json();
-        xmlText = json.contents;
-    } else {
-        xmlText = await res.text();
-    }
-    return parseRssXmlText(xmlText);
-}
-
-export async function fetchTaiwanHotNews(isManual = false, notifyCallback = null) {
-    const trackEl = document.getElementById("newsMarqueeTrack");
-    const refreshIcon = document.getElementById("newsRefreshIcon");
-
-    if (isManual && refreshIcon) {
-        refreshIcon.classList.add("fa-spin");
-    }
-
-    // 優先載入本地快取，確保開啟頁面立即滾動
-    const cachedRaw = localStorage.getItem(NEWS_CACHE_KEY);
-    let hasRenderedCache = false;
-    if (cachedRaw && !isManual) {
-        try {
-            const cachedList = JSON.parse(cachedRaw);
-            hasRenderedCache = renderNewsMarquee(cachedList);
-        } catch (e) { /* ignore */ }
-    }
-
-    const googleNewsTwRss = "https://news.google.com/rss?hl=zh-TW&gl=TW&ceid=TW:zh-Hant";
-
-    try {
-        const winnerNews = await Promise.any([
-            fetchNewsFromRss2Json(googleNewsTwRss),
-            fetchNewsFromXmlProxy("allorigins", googleNewsTwRss),
-            fetchNewsFromXmlProxy("corsproxy", googleNewsTwRss),
-            fetchNewsFromXmlProxy("codetabs", googleNewsTwRss)
-        ]);
-
-        if (renderNewsMarquee(winnerNews)) {
-            localStorage.setItem(NEWS_CACHE_KEY, JSON.stringify(winnerNews));
-            if (isManual && notifyCallback) notifyCallback("已更新台灣最新熱門新聞");
-        }
-    } catch (err) {
-        console.error("Taiwan hot news fetch failed:", err);
-        if (!hasRenderedCache && trackEl) {
-            trackEl.innerHTML = `
-                <a href="https://news.google.com/?hl=zh-TW&gl=TW&ceid=TW:zh-Hant" target="_blank" rel="noopener noreferrer"
-                   class="text-slate-300 hover:text-amber-300 underline">
-                    暫無法自動抓取即時新聞列表，點擊前往 Google 台灣焦點新聞查看最新頭條
-                </a>
-            `;
-        } else if (isManual && notifyCallback) {
-            notifyCallback("目前連線受限，顯示最近一次新聞快取");
         }
     } finally {
         if (refreshIcon) refreshIcon.classList.remove("fa-spin");

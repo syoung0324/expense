@@ -1,10 +1,8 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, doc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { getFirestore, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-// ==========================================
-// Firebase 集中配置（供全站模組共用）
-// ==========================================
-export const firebaseConfig = {
+// Firebase 配置
+const firebaseConfig = {
     apiKey: "AIzaSyDICgwxG4eGVg_g3iQrAnHvGpVc0WFU3J0",
     authDomain: "expense-ddcfe.firebaseapp.com",
     projectId: "expense-ddcfe",
@@ -16,8 +14,6 @@ export const firebaseConfig = {
 // 初始化 Firebase & Firestore
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
-
-// 共用 Firestore 文件參照（對應您原本的資料庫路徑）
 export const dataDocRef = doc(db, "expense_tracker", "main_data");
 export const adminDocRef = doc(db, "expense_tracker", "admin_config");
 
