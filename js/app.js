@@ -1,38 +1,31 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
-    getFirestore,
-    doc,
     getDoc,
     setDoc,
     onSnapshot
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {
+    firebaseConfig,
+    db,
+    dataDocRef,
+    adminDocRef,
+    DEFAULT_MONTH_KEY,
+    INITIAL_COLUMNS,
+    INITIAL_MEMBERS
+} from "./firebase-config.js";
 import {
     fetchXinfengWeather,
     fetchTaiwanStockIndex,
     fetchTaiwanHotNews
 } from "./widgets.js";
 
-// ==========================================
-// 1. Firebase Firestore 設定（請填入您的專案金鑰）
-// ==========================================
-const firebaseConfig = {
-  apiKey: "AIzaSyDIcgwxG4eGVg_g3iQrAnHvGpVc0WFU3J0",
-  authDomain: "expense-ddcfe.firebaseapp.com",
-  projectId: "expense-ddcfe",
-  storageBucket: "expense-ddcfe.firebasestorage.app",
-  messagingSenderId: "457060907844",
-  appId: "1:457060907844:web:1574ec3ffa204cd4383511"
-};
-
 const LOCAL_STORAGE_KEY = "team_expense_tracker_data_v1";
 const ADMIN_SESSION_KEY = "team_expense_is_admin";
 
-let db = null;
 let useCloudSync = false;
 let unsubscribeSnapshot = null;
 
 // ==========================================
-// 2. 全域狀態管理
+// 1. 全域狀態管理
 // ==========================================
 let appData = {
     months: {},       // { "2026年11月": { columns: [{ id, title, note }], members: [{ id, name, fees: { colId: 0 } }] } }
@@ -50,7 +43,7 @@ let pendingWorkbook = null;
 let selectedSheetName = "";
 
 // ==========================================
-// 3. 工具函式：Toast 提示 & 同步狀態
+// 2. 工具函式：Toast 提示 & 同步狀態
 // ==========================================
 let toastTimer = null;
 function showToast(message, type = "success") {
@@ -110,24 +103,16 @@ function escapeHtml(str) {
 }
 
 // ==========================================
-// 4. 資料持久化與 Firestore 同步
+// 3. 資料持久化與 Firestore 同步
 // ==========================================
 function getDefaultSampleData() {
-    const defaultMonth = `${new Date().getFullYear()}年${new Date().getMonth() + 1}月`;
-    const c1 = generateId("col");
-    const c2 = generateId("col");
+    const defaultMonth = DEFAULT_MONTH_KEY || `${new Date().getFullYear()}年${new Date().getMonth() + 1}月`;
     return {
         monthOrder: [defaultMonth],
         months: {
             [defaultMonth]: {
-                columns: [
-                    { id: c1, title: "月費 / 場地費", note: "每月固定分攤費用" },
-                    { id: c2, title: "用球 / 雜支", note: "" }
-                ],
-                members: [
-                    { id: generateId("mem"), name: "範例隊員A", fees: { [c1]: 500, [c2]: 100 } },
-                    { id: generateId("mem"), name: "範例隊員B", fees: { [c1]: 500, [c2]: 0 } }
-                ]
+                columns: INITIAL_COLUMNS.map((c) => ({ ...c })),
+                members: INITIAL_MEMBERS.map((m) => ({ ...m }))
             }
         }
     };
@@ -155,8 +140,7 @@ async function saveData() {
     if (useCloudSync && db) {
         try {
             updateSyncBadge("syncing", "同步中...");
-            const docRef = doc(db, "expenseTracker", "mainData");
-            await setDoc(docRef, {
+            await setDoc(dataDocRef, {
                 monthOrder: appData.monthOrder,
                 months: appData.months,
                 updatedAt: new Date().toISOString()
@@ -180,20 +164,17 @@ function initFirebaseAndData() {
     }
     renderAll();
 
-    if (!firebaseConfig.apiKey || firebaseConfig.apiKey === "YOUR_API_KEY") {
+    if (!firebaseConfig?.apiKey || firebaseConfig.apiKey === "YOUR_API_KEY" || !db) {
         updateSyncBadge("local", "本機儲存模式");
         return;
     }
 
     try {
-        const app = initializeApp(firebaseConfig);
-        db = getFirestore(app);
         useCloudSync = true;
         updateSyncBadge("syncing", "連線雲端中...");
 
-        const docRef = doc(db, "expenseTracker", "mainData");
         unsubscribeSnapshot = onSnapshot(
-            docRef,
+            dataDocRef,
             async (snap) => {
                 if (snap.exists()) {
                     const cloud = snap.data();
@@ -209,7 +190,7 @@ function initFirebaseAndData() {
                         renderAll();
                     }
                 } else {
-                    await setDoc(docRef, {
+                    await setDoc(dataDocRef, {
                         monthOrder: appData.monthOrder,
                         months: appData.months,
                         updatedAt: new Date().toISOString()
@@ -224,14 +205,14 @@ function initFirebaseAndData() {
             }
         );
     } catch (e) {
-        console.error("Firebase 初始化失敗:", e);
+        console.error("Firebase 監聽啟動失敗:", e);
         useCloudSync = false;
         updateSyncBadge("local", "本機儲存模式");
     }
 }
 
 // ==========================================
-// 5. 管理者權限控制（支援 Firestore 後端密碼驗證）
+// 4. 管理者權限控制（支援 Firestore 後端密碼驗證）
 // ==========================================
 function updateAdminUI() {
     const adminBtnText = document.getElementById("adminBtnText");
@@ -288,10 +269,10 @@ async function checkAdminPassword() {
 
     let validPassword = null;
 
-    // 優先從 Firestore config/admin 讀取密碼，避免硬編碼於前端
+    // 優先從共用的 adminDocRef (config/admin) 讀取密碼
     if (useCloudSync && db) {
         try {
-            const adminDoc = await getDoc(doc(db, "config", "admin"));
+            const adminDoc = await getDoc(adminDocRef);
             if (adminDoc.exists() && adminDoc.data().password) {
                 validPassword = String(adminDoc.data().password);
             }
@@ -318,7 +299,7 @@ async function checkAdminPassword() {
 }
 
 // ==========================================
-// 6. 月份分頁管理
+// 5. 月份分頁管理
 // ==========================================
 function renderMonthTabs() {
     const container = document.getElementById("monthTabsContainer");
@@ -503,7 +484,7 @@ async function deleteMonth(monthName) {
 }
 
 // ==========================================
-// 7. 費用項目（欄位）新增、編輯、刪除與備註
+// 6. 費用項目（欄位）新增、編輯、刪除與備註
 // ==========================================
 function openAddColumnModal() {
     document.getElementById("columnModalTitle").textContent = "新增費用支出項目 (欄位)";
@@ -594,7 +575,7 @@ function closeNoteModal() {
 }
 
 // ==========================================
-// 8. 隊員新增、編輯、刪除
+// 7. 隊員新增、編輯、刪除
 // ==========================================
 function openAddMemberModal() {
     document.getElementById("memberModalTitle").textContent = "新增成員";
@@ -666,7 +647,7 @@ async function deleteMemberFromModal() {
 }
 
 // ==========================================
-// 9. 金額編輯、複製與批次貼上
+// 8. 金額編輯、複製與批次貼上
 // ==========================================
 async function updateCellAmount(memberId, colId, rawVal) {
     if (!isAdmin) return;
@@ -780,7 +761,7 @@ async function applyBatchPaste() {
 }
 
 // ==========================================
-// 10. 行動版單人費用編輯視窗
+// 9. 行動版單人費用編輯視窗
 // ==========================================
 let currentMobileEditMemberId = null;
 
@@ -848,7 +829,7 @@ function closeMobileEditModal() {
 }
 
 // ==========================================
-// 11. 檢視模式切換、搜尋與畫面渲染
+// 10. 檢視模式切換、搜尋與畫面渲染
 // ==========================================
 function switchViewMode(mode) {
     viewMode = mode;
@@ -1108,7 +1089,7 @@ function renderCardsView(columns, members) {
 }
 
 // ==========================================
-// 12. Excel 多分頁匯入與匯出 (SheetJS)
+// 11. Excel 多分頁匯入與匯出 (SheetJS)
 // ==========================================
 function triggerExcelImport() {
     if (!isAdmin) return;
@@ -1327,7 +1308,7 @@ function exportToExcel() {
 }
 
 // ==========================================
-// 13. 系統初始化與全域函式掛載
+// 12. 系統初始化與全域函式掛載
 // ==========================================
 function initApp() {
     // 啟動頂部資訊列（新豐鄉天氣、台股大盤、台灣熱門新聞跑馬燈）
