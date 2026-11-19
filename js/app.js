@@ -74,15 +74,18 @@ function initApp() {
 }
 
 function handleAdminBtnClick() {
-    if (isAdminLoggedIn) {
-        if (confirm("確定要登出管理者身分嗎？")) {
-            isAdminLoggedIn = false;
-            localStorage.removeItem("team_expense_is_admin");
-            updateAdminUI();
-            showToast("已登出管理者身分");
-        }
-    } else {
+    if (!isAdminLoggedIn) {
         openAdminModal();
+    }
+}
+
+function logoutAdmin() {
+    if (!isAdminLoggedIn) return;
+    if (confirm("確定要登出管理者身分嗎？")) {
+        isAdminLoggedIn = false;
+        localStorage.removeItem("team_expense_is_admin");
+        updateAdminUI();
+        showToast("已登出管理者身分");
     }
 }
 
@@ -136,21 +139,22 @@ function updateAdminUI() {
     const btn = document.getElementById("btnAdminLogin");
     
     const adminOnlyElements = [
+        document.getElementById("btnAdminLogout"),
         document.getElementById("btnAddMonthBtn"),
         document.getElementById("btnAddMemberBtn"),
         document.getElementById("btnAddColumnBtn"),
-        document.getElementById("btnImportExcel"),
-        document.getElementById("btnExportExcel"),
+        document.getElementById("wrapImportExcel"),
+        document.getElementById("wrapExportExcel"),
         document.getElementById("btnBatchPaste")
     ];
 
     if (isAdminLoggedIn) {
         btnText.innerText = "管理者 (已登入)";
-        btn.className = "bg-emerald-700 hover:bg-emerald-600 text-white font-medium text-xs sm:text-sm px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg shadow transition flex items-center gap-1.5 border border-emerald-400/40";
+        btn.className = "bg-emerald-700 text-white font-medium text-xs sm:text-sm px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg shadow flex items-center gap-1.5 border border-emerald-400/40 cursor-default";
         adminOnlyElements.forEach(el => el && el.classList.remove("hidden"));
     } else {
         btnText.innerText = "管理者登入";
-        btn.className = "bg-indigo-800 hover:bg-indigo-600 text-white font-medium text-xs sm:text-sm px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg shadow transition flex items-center gap-1.5 border border-indigo-400/40";
+        btn.className = "bg-indigo-800 hover:bg-indigo-600 text-white font-medium text-xs sm:text-sm px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg shadow transition flex items-center gap-1.5 border border-indigo-400/40 cursor-pointer";
         adminOnlyElements.forEach(el => el && el.classList.add("hidden"));
         
         if (monthsData[currentMonth] && monthsData[currentMonth].isHidden) {
@@ -1440,6 +1444,7 @@ Object.assign(window, {
     fetchXinfengWeather: (isManual) => fetchXinfengWeather(isManual, showToast),
     fetchTaiwanStockIndex: (isManual) => fetchTaiwanStockIndex(isManual, showToast),
     handleAdminBtnClick,
+    logoutAdmin,
     openAdminModal,
     closeAdminModal,
     checkAdminPassword,
