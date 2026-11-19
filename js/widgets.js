@@ -1,4 +1,18 @@
 // ==========================================
+// 共用工具：帶逾時控制的 fetch
+// ==========================================
+async function fetchWithTimeout(url, timeoutMs = 5000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        const res = await fetch(url, { signal: controller.signal });
+        return res;
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+// ==========================================
 // 1. 新竹縣新豐鄉氣象預報邏輯 (Open-Meteo API)
 // ==========================================
 function parseWmoCode(code) {
@@ -22,7 +36,7 @@ export async function fetchXinfengWeather(isManual = false, notifyCallback = nul
 
     try {
         const url = "https://api.open-meteo.com/v1/forecast?latitude=24.8996&longitude=120.9854&current=temperature_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max&timezone=Asia%2FTaipei&forecast_days=1";
-        const res = await fetch(url);
+        const res = await fetchWithTimeout(url, 6000);
         if (!res.ok) throw new Error("Weather API HTTP Error");
         const data = await res.json();
 
@@ -101,6 +115,8 @@ export async function fetchXinfengWeather(isManual = false, notifyCallback = nul
 // ==========================================
 // 2. 今日台灣股票大盤指數 (加權指數 TAIEX)
 // ==========================================
+const TAIEX_CACHE_KEY = "taiex_last_quote_cache";
+
 function renderTaiexDisplay(price, prevClose, high, low, timeLabel) {
     const taiexEl = document.getElementById("taiexMainInfo");
     if (!taiexEl || isNaN(price) || price <= 0) return false;
@@ -147,6 +163,26 @@ function renderTaiexDisplay(price, prevClose, high, low, timeLabel) {
     return true;
 }
 
+function parseYahooTaiexJson(yfData) {
+    const meta = yfData?.chart?.result?.[0]?.meta;
+    if (!meta || !meta.regularMarketPrice) return null;
+
+    const price = parseFloat(meta.regularMarketPrice);
+    const prevClose = parseFloat(meta.chartPreviousClose || meta.previousClose);
+    const high = parseFloat(meta.regularMarketDayHigh);
+    const low = parseFloat(meta.regularMarketDayLow);
+
+    let timeLabel = "";
+    if (meta.regularMarketTime) {
+        const d = new Date(meta.regularMarketTime * 1000);
+        const hh = String(d.getHours()).padStart(2, "0");
+        const mm = String(d.getMinutes()).padStart(2, "0");
+        timeLabel = `${hh}:${mm}`;
+    }
+
+    return { price, prevClose, high, low, timeLabel };
+}
+
 export async function fetchTaiwanStockIndex(isManual = false, notifyCallback = null) {
     const taiexEl = document.getElementById("taiexMainInfo");
     const refreshIcon = document.getElementById("taiexRefreshIcon");
@@ -155,59 +191,73 @@ export async function fetchTaiwanStockIndex(isManual = false, notifyCallback = n
         refreshIcon.classList.add("fa-spin");
     }
 
+    // 先讀取本地快取避免空白等待
+    const cachedRaw = localStorage.getItem(TAIEX_CACHE_KEY);
+    let hasRenderedCache = false;
+    if (cachedRaw && !isManual) {
+        try {
+            const c = JSON.parse(cachedRaw);
+            hasRenderedCache = renderTaiexDisplay(c.price, c.prevClose, c.high, c.low, `${c.timeLabel} 快取`);
+        } catch (e) { /* ignore */ }
+    }
+
+    const yfTarget = `https://query1.finance.yahoo.com/v8/finance/chart/%5ETWII?interval=1m&range=1d&_=${Date.now()}`;
+
+    // 多組 CORS 代理線路依序嘗試（每條限制 5 秒逾時）
+    const proxyGenerators = [
+        () => `https://corsproxy.io/?${encodeURIComponent(yfTarget)}`,
+        () => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(yfTarget)}`,
+        () => `https://api.allorigins.win/raw?url=${encodeURIComponent(yfTarget)}`
+    ];
+
     try {
-        const twseUrl = `https://mis.twse.com.tw/stock/api/getStockInfo.jsp?ex_ch=tse_t00.tw&json=1&delay=0&_=${Date.now()}`;
-        const proxyUrl1 = `https://api.allorigins.win/get?url=${encodeURIComponent(twseUrl)}`;
+        for (const makeUrl of proxyGenerators) {
+            try {
+                const res = await fetchWithTimeout(makeUrl(), 5000);
+                if (!res.ok) continue;
+                const json = await res.json();
+                const parsed = parseYahooTaiexJson(json);
 
-        const res1 = await fetch(proxyUrl1);
-        if (res1.ok) {
-            const wrapper = await res1.json();
-            const parsed = JSON.parse(wrapper.contents);
-            if (parsed && parsed.msgArray && parsed.msgArray.length > 0) {
-                const info = parsed.msgArray[0];
-                let current = parseFloat(info.z);
-                const prevClose = parseFloat(info.y);
-                const high = parseFloat(info.h);
-                const low = parseFloat(info.l);
-                const timeStr = info.t ? info.t.slice(0, 5) : "";
-
-                if (isNaN(current) || current <= 0) {
-                    current = parseFloat(info.o) || prevClose;
-                }
-
-                if (renderTaiexDisplay(current, prevClose, high, low, timeStr)) {
+                if (parsed && renderTaiexDisplay(parsed.price, parsed.prevClose, parsed.high, parsed.low, parsed.timeLabel)) {
+                    localStorage.setItem(TAIEX_CACHE_KEY, JSON.stringify(parsed));
                     if (isManual && notifyCallback) notifyCallback("已更新台股加權指數最新報價");
+                    return;
+                }
+            } catch (err) {
+                // 單一代理失敗或逾時，自動切換下一組代理
+                continue;
+            }
+        }
+
+        // 備援路線：證交所 OpenAPI 每日大盤指數 (FMTQIK)
+        const twseOpenUrl = "https://openapi.twse.com.tw/v1/exchangeReport/FMTQIK";
+        const twseRes = await fetchWithTimeout(`https://corsproxy.io/?${encodeURIComponent(twseOpenUrl)}`, 5000);
+        if (twseRes.ok) {
+            const rows = await twseRes.json();
+            if (Array.isArray(rows) && rows.length > 0) {
+                const latest = rows[rows.length - 1];
+                const price = parseFloat(String(latest.TAIEX).replace(/,/g, ""));
+                const change = parseFloat(String(latest.Change).replace(/,/g, ""));
+                const prevClose = !isNaN(price) && !isNaN(change) ? price - change : price;
+                const dateLabel = latest.Date ? `證交所 ${latest.Date}` : "證交所收盤";
+
+                if (renderTaiexDisplay(price, prevClose, null, null, dateLabel)) {
+                    localStorage.setItem(TAIEX_CACHE_KEY, JSON.stringify({
+                        price, prevClose, high: null, low: null, timeLabel: dateLabel
+                    }));
+                    if (isManual && notifyCallback) notifyCallback("已更新台股大盤收盤指數");
                     return;
                 }
             }
         }
-        throw new Error("TWSE MIS fallback to Yahoo Finance");
-    } catch (err1) {
-        try {
-            const yfUrl = `https://query1.finance.yahoo.com/v8/finance/chart/%5ETWII?interval=1d&range=2d`;
-            const proxyUrl2 = `https://api.allorigins.win/get?url=${encodeURIComponent(yfUrl)}`;
-            const res2 = await fetch(proxyUrl2);
-            if (res2.ok) {
-                const wrapper2 = await res2.json();
-                const yfData = JSON.parse(wrapper2.contents);
-                const meta = yfData?.chart?.result?.[0]?.meta;
-                if (meta && meta.regularMarketPrice) {
-                    const price = parseFloat(meta.regularMarketPrice);
-                    const prevClose = parseFloat(meta.chartPreviousClose || meta.previousClose);
-                    const high = parseFloat(meta.regularMarketDayHigh);
-                    const low = parseFloat(meta.regularMarketDayLow);
-                    if (renderTaiexDisplay(price, prevClose, high, low, "Yahoo報價")) {
-                        if (isManual && notifyCallback) notifyCallback("已更新台股加權指數最新報價");
-                        return;
-                    }
-                }
-            }
-            throw new Error("All stock sources failed");
-        } catch (err2) {
-            console.error("TAIEX fetch failed:", err1, err2);
-            if (taiexEl) {
-                taiexEl.innerHTML = `<span class="text-slate-300 text-xs">暫無法取得大盤即時報價</span>`;
-            }
+
+        throw new Error("All stock API routes failed");
+    } catch (err) {
+        console.error("TAIEX fetch failed:", err);
+        if (!hasRenderedCache && taiexEl) {
+            taiexEl.innerHTML = `<span class="text-slate-300 text-xs">暫無法取得大盤報價（請稍後點擊右側重整）</span>`;
+        } else if (isManual && notifyCallback) {
+            notifyCallback("目前連線逾時，顯示最近一次大盤報價");
         }
     } finally {
         if (refreshIcon) refreshIcon.classList.remove("fa-spin");
