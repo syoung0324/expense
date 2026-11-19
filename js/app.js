@@ -14,6 +14,13 @@ let pendingImportData = null;
 let isAdminLoggedIn = false;
 let draggedMonthKey = null;
 
+// 判斷指定月份是否啟用「姜宸媽對帳區」（預設為 true，維持既有分頁相容性）
+function isReconcileEnabled(mKey = currentMonth) {
+    const m = monthsData[mKey];
+    if (!m) return true;
+    return m.enableReconcile !== false;
+}
+
 function updateSyncStatus(text, iconClass) {
     const statusEl = document.getElementById("syncStatusText");
     const iconEl = document.getElementById("syncStatusIcon");
@@ -44,7 +51,8 @@ function initApp() {
     if (Object.keys(monthsData).length === 0) {
         monthsData[DEFAULT_MONTH_KEY] = {
             columns: JSON.parse(JSON.stringify(INITIAL_COLUMNS)),
-            members: JSON.parse(JSON.stringify(INITIAL_MEMBERS))
+            members: JSON.parse(JSON.stringify(INITIAL_MEMBERS)),
+            enableReconcile: true
         };
     }
 
@@ -236,7 +244,8 @@ function loadMonthData(monthKey, shouldSave = true) {
     if (!monthsData[currentMonth]) {
         monthsData[currentMonth] = {
             columns: JSON.parse(JSON.stringify(columns.length > 0 ? columns : INITIAL_COLUMNS)),
-            members: []
+            members: [],
+            enableReconcile: true
         };
     }
 
@@ -342,6 +351,7 @@ function renderMonthTabs() {
     Object.keys(monthsData).forEach(mKey => {
         const monthInfo = monthsData[mKey];
         const isHidden = !!monthInfo.isHidden;
+        const hasReconcile = isReconcileEnabled(mKey);
 
         if (!isAdminLoggedIn && isHidden) return;
 
@@ -349,23 +359,28 @@ function renderMonthTabs() {
         
         html += `
             <div ${isAdminLoggedIn ? `draggable="true" ondragstart="handleMonthDragStart(event, '${mKey}')" ondragover="handleMonthDragOver(event)" ondragenter="handleMonthDragEnter(event)" ondragleave="handleMonthDragLeave(event)" ondrop="handleMonthDrop(event, '${mKey}')" ondragend="handleMonthDragEnd(event)" class="cursor-grab active:cursor-grabbing hover:border-slate-300"` : ''}
-                 class="flex items-center group ${isHidden ? 'bg-slate-200/60 border-slate-300/60' : 'bg-slate-100/80 border-slate-200/50'} rounded-lg p-0.5 border transition-all select-none shrink-0">
+                 class="flex flex-col items-start group ${isHidden ? 'bg-slate-200/60 border-slate-300/60' : 'bg-slate-100/80 border-slate-200/50'} rounded-lg p-1 border transition-all select-none shrink-0">
                 <button onclick="loadMonthData('${mKey}')" class="px-2.5 sm:px-3 py-1.5 rounded-lg font-medium text-xs sm:text-sm whitespace-nowrap transition flex items-center gap-1 sm:gap-1.5 ${isActive ? (isHidden ? 'bg-slate-700 text-slate-200 shadow-sm font-semibold' : 'bg-indigo-600 text-white shadow-sm font-semibold') : (isHidden ? 'text-slate-500 hover:bg-slate-300' : 'text-slate-600 hover:bg-slate-200')}">
                     ${isHidden ? '<i class="fa-solid fa-eye-slash text-xs"></i>' : '<i class="fa-regular fa-calendar-check text-xs"></i>'}
                     <span class="${isHidden ? 'line-through decoration-current opacity-80' : ''}">${mKey}</span>
                 </button>
                 ${isAdminLoggedIn ? `
-                    <button onclick="toggleMonthVisibility('${mKey}')" class="text-slate-400 hover:text-amber-600 px-1 transition opacity-70 hover:opacity-100" title="${isHidden ? '目前為隱藏狀態，點擊設為公開' : '目前為公開狀態，點擊設為隱藏'}">
-                        <i class="fa-solid ${isHidden ? 'fa-eye' : 'fa-eye-slash'} text-[10px] sm:text-[11px]"></i>
-                    </button>
-                    <button onclick="openEditMonthModal('${mKey}')" class="text-slate-400 hover:text-indigo-600 px-1 transition opacity-70 hover:opacity-100" title="修改月份名稱">
-                        <i class="fa-solid fa-pen text-[10px] sm:text-[11px]"></i>
-                    </button>
-                    ${Object.keys(monthsData).length > 1 ? `
-                        <button onclick="deleteMonth('${mKey}')" class="text-slate-400 hover:text-rose-500 pr-1 px-0.5 transition opacity-70 hover:opacity-100" title="刪除此月份">
-                            <i class="fa-solid fa-xmark text-xs"></i>
+                    <div class="flex items-center gap-1 px-1.5 pt-1 pb-0.5 w-full">
+                        <button onclick="toggleMonthVisibility('${mKey}')" class="text-slate-400 hover:text-amber-600 px-1 transition opacity-75 hover:opacity-100" title="${isHidden ? '目前為隱藏狀態，點擊設為公開' : '目前為公開狀態，點擊設為隱藏'}">
+                            <i class="fa-solid ${isHidden ? 'fa-eye' : 'fa-eye-slash'} text-[11px]"></i>
                         </button>
-                    ` : ''}
+                        <button onclick="openEditMonthModal('${mKey}')" class="text-slate-400 hover:text-indigo-600 px-1 transition opacity-75 hover:opacity-100" title="修改月份名稱">
+                            <i class="fa-solid fa-pen text-[11px]"></i>
+                        </button>
+                        <button onclick="toggleMonthReconcile('${mKey}')" class="px-1 py-0.2 rounded transition flex items-center gap-0.5 ${hasReconcile ? 'bg-rose-100 text-rose-700 border border-rose-300/80 opacity-100 shadow-2xs' : 'text-slate-400 opacity-45 grayscale hover:opacity-80'}" title="${hasReconcile ? '已開啟【姜宸媽對帳區】，點擊關閉' : '未開啟【姜宸媽對帳區】，點擊開啟'}">
+                            <span class="text-xs leading-none">🤺</span>
+                        </button>
+                        ${Object.keys(monthsData).length > 1 ? `
+                            <button onclick="deleteMonth('${mKey}')" class="text-slate-400 hover:text-rose-500 px-1 transition opacity-75 hover:opacity-100 ml-auto" title="刪除此月份">
+                                <i class="fa-solid fa-xmark text-xs"></i>
+                            </button>
+                        ` : ''}
+                    </div>
                 ` : ''}
             </div>
         `;
@@ -376,6 +391,19 @@ function renderMonthTabs() {
     }
     
     container.innerHTML = html;
+}
+
+function toggleMonthReconcile(mKey) {
+    if (!isAdminLoggedIn || !monthsData[mKey]) return;
+    const currentStatus = isReconcileEnabled(mKey);
+    monthsData[mKey].enableReconcile = !currentStatus;
+    saveState();
+    renderMonthTabs();
+    if (mKey === currentMonth) {
+        renderTable();
+        renderCards();
+    }
+    showToast(`已將「${mKey}」的姜宸媽對帳區${!currentStatus ? '開啟' : '關閉'}`);
 }
 
 function toggleMonthVisibility(mKey) {
@@ -489,7 +517,8 @@ function saveNewMonth() {
 
     monthsData[monthName] = {
         columns: JSON.parse(JSON.stringify(copiedColumns)),
-        members: newMembers
+        members: newMembers,
+        enableReconcile: true
     };
 
     closeMonthModal();
@@ -624,6 +653,7 @@ function renderTable() {
     const headerRow = document.getElementById("tableHeaderRow");
     const tbody = document.getElementById("tableBody");
     const tfoot = document.getElementById("tableFooter");
+    const showReconcile = isReconcileEnabled();
 
     const filteredMembers = members.filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
@@ -654,13 +684,19 @@ function renderTable() {
             </th>
         `;
     });
+
+    if (showReconcile) {
+        headerHTML += `
+            <th class="py-2 sm:py-2.5 px-2 sm:px-3 text-center whitespace-nowrap bg-rose-50 text-rose-800 font-bold border-r border-rose-200 text-xs sm:text-sm">
+                <div class="flex items-center justify-center gap-1">
+                    <span class="text-base leading-none">🤺</span>
+                    <span>【姜宸媽追殺區】</span>
+                </div>
+            </th>
+        `;
+    }
+
     headerHTML += `
-        <th class="py-2 sm:py-2.5 px-2 sm:px-3 text-center whitespace-nowrap bg-rose-50 text-rose-800 font-bold border-r border-rose-200 text-xs sm:text-sm">
-            <div class="flex items-center justify-center gap-1">
-                <span class="text-base leading-none">🤺</span>
-                <span>【姜宸媽追殺區】</span>
-            </div>
-        </th>
         <th class="py-2 sm:py-2.5 px-2 sm:px-3 w-24 sm:w-28 text-right sticky-right bg-slate-100 border-l border-slate-200 text-indigo-700 font-bold shadow-sm whitespace-nowrap text-xs sm:text-sm">應繳金額</th>
         <th class="py-2 sm:py-2.5 px-1 sm:px-2 w-10 sm:w-12 text-center whitespace-nowrap text-xs">操作</th>
     `;
@@ -673,7 +709,7 @@ function renderTable() {
 
     filteredMembers.forEach((member, index) => {
         let memberTotal = 0;
-        const isCheckedPaid = !!member.isPaid;
+        const isCheckedPaid = showReconcile && !!member.isPaid;
 
         let rowHTML = `
             <tr class="hover:bg-slate-50/80 transition group ${isCheckedPaid ? 'bg-emerald-50/30' : ''}">
@@ -681,7 +717,7 @@ function renderTable() {
                 <td class="py-1.5 sm:py-2 px-2 sm:px-3 font-medium text-slate-800 sticky-col-2 bg-white group-hover:bg-slate-50 border-r border-slate-200 shadow-sm whitespace-nowrap">
                     <div class="flex items-center justify-between gap-1">
                         <div class="flex items-center gap-1 sm:gap-1.5 truncate">
-                            ${isCheckedPaid ? `<i class="fa-solid fa-circle-check text-emerald-500 text-xs sm:text-sm" title="對帳完成"></i>` : `<i class="fa-regular fa-circle text-slate-300 text-[10px] sm:text-xs"></i>`}
+                            ${showReconcile ? (isCheckedPaid ? `<i class="fa-solid fa-circle-check text-emerald-500 text-xs sm:text-sm" title="對帳完成"></i>` : `<i class="fa-regular fa-circle text-slate-300 text-[10px] sm:text-xs"></i>`) : ''}
                             <span class="truncate text-xs sm:text-sm ${isAdminLoggedIn ? 'cursor-pointer hover:text-indigo-600' : ''} transition ${isCheckedPaid ? 'font-semibold text-emerald-900' : ''}" onclick="${isAdminLoggedIn ? `openEditMemberModal('${member.id}')` : ''}">${member.name}</span>
                         </div>
                         ${isAdminLoggedIn ? `
@@ -724,7 +760,8 @@ function renderTable() {
 
         grandTotalSum += memberTotal;
 
-        rowHTML += `
+        if (showReconcile) {
+            rowHTML += `
                 <td class="py-1.5 sm:py-2 px-2 sm:px-3 text-center border-r border-rose-100 bg-rose-50/20">
                     <button type="button"
                         ${isAdminLoggedIn ? `onclick="toggleMemberPaid('${member.id}', ${!isCheckedPaid})"` : ''}
@@ -736,6 +773,10 @@ function renderTable() {
                         }
                     </button>
                 </td>
+            `;
+        }
+
+        rowHTML += `
                 <td class="py-1.5 sm:py-2 px-2 sm:px-3 text-right font-bold text-indigo-700 sticky-right bg-white group-hover:bg-slate-50 border-l border-slate-200 font-mono shadow-sm whitespace-nowrap text-xs sm:text-sm">
                     ${memberTotal.toLocaleString()}
                 </td>
@@ -752,9 +793,10 @@ function renderTable() {
     });
 
     if (filteredMembers.length === 0) {
+        const totalCols = columns.length + (showReconcile ? 5 : 4);
         bodyHTML = `
             <tr>
-                <td colspan="${columns.length + 5}" class="p-8 text-center text-slate-400">
+                <td colspan="${totalCols}" class="p-8 text-center text-slate-400">
                     ${members.length === 0 ? '正在從雲端資料庫載入隊員名單，或尚無隊員資料...' : '沒有找到相關的隊員資料'}
                 </td>
             </tr>
@@ -778,11 +820,16 @@ function renderTable() {
         `;
     });
 
-    const paidCount = members.filter(m => m.isPaid).length;
-    footerHTML += `
+    if (showReconcile) {
+        const paidCount = members.filter(m => m.isPaid).length;
+        footerHTML += `
             <td class="p-2 sm:p-3 text-center border-r border-rose-200 bg-rose-100/60 font-mono text-[11px] sm:text-xs text-rose-900 font-bold">
                 對帳: ${paidCount}/${members.length}
             </td>
+        `;
+    }
+
+    footerHTML += `
             <td class="p-2 sm:p-3 text-right sticky-right bg-indigo-50 border-l border-indigo-200 text-indigo-950 font-extrabold text-xs sm:text-base font-mono shadow-sm">
                 ${grandTotalSum.toLocaleString()}
             </td>
@@ -834,6 +881,7 @@ function toggleMemberPaid(memberId, isChecked) {
 function renderCards() {
     const container = document.getElementById("cardsViewContainer");
     const filteredMembers = members.filter(m => m.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    const showReconcile = isReconcileEnabled();
 
     if (filteredMembers.length === 0) {
         container.innerHTML = `<div class="col-span-full p-8 text-center bg-white rounded-xl border text-slate-400">${members.length === 0 ? '正在從雲端資料庫載入隊員名單，或尚無隊員資料...' : '沒有找到相關隊員'}</div>`;
@@ -844,7 +892,7 @@ function renderCards() {
     filteredMembers.forEach(member => {
         let memberTotal = 0;
         let activeFeeCount = 0;
-        const isCheckedPaid = !!member.isPaid;
+        const isCheckedPaid = showReconcile && !!member.isPaid;
 
         columns.forEach(col => {
             const val = parseFloat(member.values[col.id]) || 0;
@@ -874,18 +922,20 @@ function renderCards() {
                     </div>
                     <div class="text-xs text-slate-500 mb-2.5 flex items-center justify-between">
                         <span class="text-[11px] sm:text-xs">已登錄項目: <strong class="text-slate-700">${activeFeeCount}</strong> 項</span>
-                        <div class="inline-flex items-center gap-1.5">
-                            <span class="text-[10px] sm:text-[11px] font-semibold text-rose-700">姜宸媽對帳</span>
-                            <button type="button"
-                                ${isAdminLoggedIn ? `onclick="toggleMemberPaid('${member.id}', ${!isCheckedPaid})"` : ''}
-                                class="${isAdminLoggedIn ? 'cursor-pointer hover:scale-110 transition-transform' : 'cursor-default'}"
-                                title="${isAdminLoggedIn ? (isCheckedPaid ? '取消對帳' : '點擊對帳') : (isCheckedPaid ? '對帳完成' : '未對帳')}">
-                                ${isCheckedPaid ? 
-                                    `<i class="fa-solid fa-square-check text-emerald-500 text-base"></i>` : 
-                                    `<i class="fa-regular fa-square text-slate-300 text-base"></i>`
-                                }
-                            </button>
-                        </div>
+                        ${showReconcile ? `
+                            <div class="inline-flex items-center gap-1.5">
+                                <span class="text-[10px] sm:text-[11px] font-semibold text-rose-700">姜宸媽對帳</span>
+                                <button type="button"
+                                    ${isAdminLoggedIn ? `onclick="toggleMemberPaid('${member.id}', ${!isCheckedPaid})"` : ''}
+                                    class="${isAdminLoggedIn ? 'cursor-pointer hover:scale-110 transition-transform' : 'cursor-default'}"
+                                    title="${isAdminLoggedIn ? (isCheckedPaid ? '取消對帳' : '點擊對帳') : (isCheckedPaid ? '對帳完成' : '未對帳')}">
+                                    ${isCheckedPaid ? 
+                                        `<i class="fa-solid fa-square-check text-emerald-500 text-base"></i>` : 
+                                        `<i class="fa-regular fa-square text-slate-300 text-base"></i>`
+                                    }
+                                </button>
+                            </div>
+                        ` : ''}
                     </div>
                 </div>
                 <div class="flex gap-2 pt-2 border-t border-slate-50">
@@ -1315,7 +1365,10 @@ function exportToExcel() {
         return;
     }
 
-    const headers = ["姓名", ...columns.map(c => c.title), "【姜宸媽追殺區】對帳", "應繳金額"];
+    const showReconcile = isReconcileEnabled();
+    const headers = showReconcile
+        ? ["姓名", ...columns.map(c => c.title), "【姜宸媽追殺區】對帳", "應繳金額"]
+        : ["姓名", ...columns.map(c => c.title), "應繳金額"];
     const data = [headers];
 
     let grandTotal = 0;
@@ -1334,8 +1387,10 @@ function exportToExcel() {
             columnTotals[col.id] += val;
         });
 
-        if (member.isPaid) totalPaidCount++;
-        row.push(member.isPaid ? "已對帳" : "未對帳");
+        if (showReconcile) {
+            if (member.isPaid) totalPaidCount++;
+            row.push(member.isPaid ? "已對帳" : "未對帳");
+        }
         row.push(memberTotal);
         grandTotal += memberTotal;
         data.push(row);
@@ -1345,7 +1400,9 @@ function exportToExcel() {
     columns.forEach(col => {
         totalRow.push(columnTotals[col.id] || 0);
     });
-    totalRow.push(`完成: ${totalPaidCount}/${members.length}`);
+    if (showReconcile) {
+        totalRow.push(`完成: ${totalPaidCount}/${members.length}`);
+    }
     totalRow.push(grandTotal);
     data.push(totalRow);
 
@@ -1393,6 +1450,7 @@ Object.assign(window, {
     handleMonthDrop,
     handleMonthDragEnd,
     loadMonthData,
+    toggleMonthReconcile,
     toggleMonthVisibility,
     openAddMonthModal,
     closeMonthModal,
