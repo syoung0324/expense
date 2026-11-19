@@ -90,23 +90,38 @@
                 </div>
             </div>
            
-            <div class="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2 shrink-0">
-                <button id="btnAdminLogin" onclick="handleAdminBtnClick()" class="bg-indigo-800 hover:bg-indigo-600 text-white font-medium text-xs sm:text-sm px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg shadow transition flex items-center gap-1.5 border border-indigo-400/40">
-                    <span class="text-sm sm:text-base">🦩</span>
-                    <span id="adminBtnText">管理者登入</span>
-                </button>
+            <div class="flex flex-wrap items-start justify-end gap-1.5 sm:gap-2 shrink-0">
+                <!-- 管理者登入狀態與獨立登出小按鈕 -->
+                <div class="flex items-center gap-1.5">
+                    <button id="btnAdminLogin" onclick="handleAdminBtnClick()" class="bg-indigo-800 hover:bg-indigo-600 text-white font-medium text-xs sm:text-sm px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg shadow transition flex items-center gap-1.5 border border-indigo-400/40">
+                        <span class="text-sm sm:text-base">🦩</span>
+                        <span id="adminBtnText">管理者登入</span>
+                    </button>
+                    <button id="btnAdminLogout" onclick="logoutAdmin()" class="hidden bg-rose-600 hover:bg-rose-500 text-white font-medium text-xs px-2 sm:px-2.5 py-1.5 sm:py-2 rounded-lg shadow transition flex items-center gap-1 border border-rose-400/40" title="登出管理者身分">
+                        <i class="fa-solid fa-right-from-bracket text-xs"></i>
+                        <span>登出</span>
+                    </button>
+                </div>
 
                 <input type="file" id="excelFileInput" accept=".xlsx, .xls" class="hidden" onchange="handleExcelImport(event)">
                
-                <button id="btnImportExcel" onclick="triggerExcelImport()" class="hidden bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs sm:text-sm px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg shadow transition flex items-center gap-1.5">
-                    <i class="fa-solid fa-file-import text-xs sm:text-sm"></i>
-                    <span class="hidden xs:inline">匯入</span> Excel
-                </button>
+                <!-- 匯入 Excel（含下方中文說明欄） -->
+                <div id="wrapImportExcel" class="hidden flex flex-col items-center">
+                    <button id="btnImportExcel" onclick="triggerExcelImport()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs sm:text-sm px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg shadow transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-file-import text-xs sm:text-sm"></i>
+                        <span>Excel</span>
+                    </button>
+                    <span class="text-[10px] sm:text-[11px] text-indigo-200 mt-1 leading-none font-medium tracking-wide">匯入 Excel</span>
+                </div>
 
-                <button id="btnExportExcel" onclick="exportToExcel()" class="hidden bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs sm:text-sm px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg shadow transition flex items-center gap-1.5">
-                    <i class="fa-solid fa-file-excel text-xs sm:text-sm"></i>
-                    <span class="hidden xs:inline">匯出</span> Excel
-                </button>
+                <!-- 匯出 Excel（含下方中文說明欄） -->
+                <div id="wrapExportExcel" class="hidden flex flex-col items-center">
+                    <button id="btnExportExcel" onclick="exportToExcel()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs sm:text-sm px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg shadow transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-file-excel text-xs sm:text-sm"></i>
+                        <span>Excel</span>
+                    </button>
+                    <span class="text-[10px] sm:text-[11px] text-emerald-200 mt-1 leading-none font-medium tracking-wide">匯出 Excel</span>
+                </div>
             </div>
         </div>
     </header>
