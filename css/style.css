@@ -48,3 +48,16 @@ body {
     right: 0;
     z-index: 10;
 }
+
+/* 備註說明氣泡對話框尖角 */
+.note-popover-arrow {
+    position: absolute;
+    bottom: -8px;
+    left: 24px;
+    width: 14px;
+    height: 14px;
+    background-color: #fbbf24;
+    border-right: 1px solid rgba(180, 83, 9, 0.7);
+    border-bottom: 1px solid rgba(180, 83, 9, 0.7);
+    transform: rotate(45deg);
+}
