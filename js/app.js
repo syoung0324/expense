@@ -707,7 +707,7 @@ function renderTable() {
 
     headerHTML += `
         <th class="py-2 sm:py-2.5 px-2 sm:px-3 w-24 sm:w-28 text-right sticky-right bg-slate-100 border-l border-slate-200 text-indigo-700 font-bold shadow-sm whitespace-nowrap text-xs sm:text-sm">應繳金額</th>
-        <th class="py-2 sm:py-2.5 px-1 sm:px-2 w-10 sm:w-12 text-center whitespace-nowrap text-xs">操作</th>
+        ${isAdminLoggedIn ? `<th class="py-2 sm:py-2.5 px-1 sm:px-2 w-10 sm:w-12 text-center whitespace-nowrap text-xs">操作</th>` : ''}
     `;
     headerRow.innerHTML = headerHTML;
 
@@ -789,20 +789,20 @@ function renderTable() {
                 <td class="py-1.5 sm:py-2 px-2 sm:px-3 text-right font-bold text-indigo-700 sticky-right bg-white group-hover:bg-slate-50 border-l border-slate-200 font-mono shadow-sm whitespace-nowrap text-xs sm:text-sm">
                     ${memberTotal.toLocaleString()}
                 </td>
-                <td class="py-1.5 sm:py-2 px-1 text-center">
-                    ${isAdminLoggedIn ? `
+                ${isAdminLoggedIn ? `
+                    <td class="py-1.5 sm:py-2 px-1 text-center">
                         <button onclick="deleteMember('${member.id}')" class="text-slate-300 hover:text-rose-500 transition px-1 py-0.5" title="刪除隊員">
                             <i class="fa-solid fa-trash-can text-xs"></i>
                         </button>
-                    ` : `<span class="text-slate-300">-</span>`}
-                </td>
+                    </td>
+                ` : ''}
             </tr>
         `;
         bodyHTML += rowHTML;
     });
 
     if (filteredMembers.length === 0) {
-        const totalCols = columns.length + (showReconcile ? 5 : 4);
+        const totalCols = columns.length + (showReconcile ? 4 : 3) + (isAdminLoggedIn ? 1 : 0);
         bodyHTML = `
             <tr>
                 <td colspan="${totalCols}" class="p-8 text-center text-slate-400">
@@ -842,7 +842,7 @@ function renderTable() {
             <td class="p-2 sm:p-3 text-right sticky-right bg-indigo-50 border-l border-indigo-200 text-indigo-950 font-extrabold text-xs sm:text-base font-mono shadow-sm">
                 ${grandTotalSum.toLocaleString()}
             </td>
-            <td class="p-2 sm:p-3"></td>
+            ${isAdminLoggedIn ? `<td class="p-2 sm:p-3"></td>` : ''}
         </tr>
     `;
     tfoot.innerHTML = footerHTML;
