@@ -13,6 +13,7 @@ let pendingWorkbook = null;
 let pendingImportData = null;
 let isAdminLoggedIn = false;
 let draggedMonthKey = null;
+let activeNoteColId = null;
 
 // 判斷指定月份是否啟用「姜宸媽對帳區」（預設為 true，維持既有分頁相容性）
 function isReconcileEnabled(mKey = currentMonth) {
@@ -670,9 +671,9 @@ function renderTable() {
         headerHTML += `
             <th class="py-2 sm:py-2.5 px-2 text-center whitespace-nowrap border-r border-slate-200 group relative">
                 <div class="flex items-center justify-center gap-1">
-                    <div class="flex items-center gap-1 truncate cursor-pointer" onclick="openNoteModal('${col.id}')" title="點擊查看項目說明與編輯">
+                    <div class="flex items-center gap-1 truncate cursor-pointer" onclick="openNoteModal(event, '${col.id}')" title="點擊查看項目說明">
                         <span class="truncate font-semibold text-slate-800 hover:text-indigo-600 transition text-xs sm:text-sm">${col.title}</span>
-                        ${hasNote ? `<button onclick="event.stopPropagation(); openNoteModal('${col.id}')" class="text-amber-500 hover:text-amber-600 text-xs" title="查看備註說明"><i class="fa-solid fa-circle-info"></i></button>` : ''}
+                        ${hasNote ? `<button type="button" data-note-icon="${col.id}" onclick="event.stopPropagation(); openNoteModal(event, '${col.id}')" class="text-amber-500 hover:text-amber-600 text-xs" title="查看備註說明"><i class="fa-solid fa-circle-info"></i></button>` : ''}
                     </div>
                     ${isAdminLoggedIn ? `
                         <div class="flex items-center opacity-0 group-hover:opacity-100 transition">
@@ -960,7 +961,7 @@ function renderCards() {
 }
 
 // ==========================================
-// 彈跳視窗操作 (隊員、欄位、備註、手機編輯)
+// 彈跳視窗操作 (隊員、欄位、備註氣泡、手機編輯)
 // ==========================================
 function openMobileEditModal(memberId) {
     const member = members.find(m => m.id === memberId);
@@ -1143,16 +1144,75 @@ function saveColumn() {
     closeColumnModal();
 }
 
-function openNoteModal(colId) {
+function openNoteModal(event, colId) {
+    if (event) event.stopPropagation();
+
+    const popover = document.getElementById("noteModal");
+    // 若重複點擊同一個圖示則切換關閉
+    if (!popover.classList.contains("hidden") && activeNoteColId === colId) {
+        closeNoteModal();
+        return;
+    }
+
     const col = columns.find(c => c.id === colId);
     if (!col) return;
+
+    activeNoteColId = colId;
     document.getElementById("noteModalTitle").innerText = col.title;
-    document.getElementById("noteModalContent").innerText = col.note && col.note.trim() !== "" ? col.note : "尚無詳細說明。";
-    document.getElementById("noteModal").classList.remove("hidden");
+    document.getElementById("noteModalContent").innerText =
+        col.note && col.note.trim() !== "" ? col.note : "尚無詳細說明。";
+
+    // 先顯示以取得實際寬高
+    popover.classList.remove("hidden");
+
+    // 優先對準驚嘆號圖示，若無則對準點擊的標題區塊
+    const iconBtn = document.querySelector(`[data-note-icon="${colId}"]`);
+    const anchorEl = iconBtn || (event ? event.currentTarget : null);
+    if (!anchorEl) return;
+
+    const rect = anchorEl.getBoundingClientRect();
+    const popRect = popover.getBoundingClientRect();
+    const arrow = document.getElementById("notePopoverArrow");
+
+    const anchorCenterX = rect.left + rect.width / 2;
+    // 對話框向右上延伸，讓尖角位於對話框偏左側（距離左緣約 28px）並對準圖示中心
+    let left = anchorCenterX - 28;
+    const margin = 12;
+
+    // 避免超出螢幕左右邊界
+    if (left + popRect.width > window.innerWidth - margin) {
+        left = window.innerWidth - popRect.width - margin;
+    }
+    if (left < margin) {
+        left = margin;
+    }
+
+    // 顯示在圖示正上方（預留 10px 給尖角高度）
+    let top = rect.top - popRect.height - 10;
+    // 若上方空間不足，則改顯示在圖示下方
+    if (top < margin) {
+        top = rect.bottom + 10;
+        arrow.style.bottom = "auto";
+        arrow.style.top = "-8px";
+        arrow.style.transform = "rotate(225deg)";
+    } else {
+        arrow.style.top = "auto";
+        arrow.style.bottom = "-8px";
+        arrow.style.transform = "rotate(45deg)";
+    }
+
+    // 動態調整尖角水平位置，確保始終指向圖示中心
+    const arrowLeft = Math.max(16, Math.min(popRect.width - 28, anchorCenterX - left - 7));
+    arrow.style.left = `${arrowLeft}px`;
+
+    popover.style.left = `${left}px`;
+    popover.style.top = `${top}px`;
 }
 
 function closeNoteModal() {
-    document.getElementById("noteModal").classList.add("hidden");
+    const popover = document.getElementById("noteModal");
+    if (popover) popover.classList.add("hidden");
+    activeNoteColId = null;
 }
 
 function deleteColumn(colId) {
@@ -1439,6 +1499,17 @@ function showToast(message) {
     }, 2500);
 }
 
+// 點擊頁面空白處、視窗縮放或捲動表格時自動關閉氣泡對話框
+document.addEventListener("click", () => closeNoteModal());
+window.addEventListener("resize", () => closeNoteModal());
+window.addEventListener("DOMContentLoaded", () => {
+    initApp();
+    const scrollWrapper = document.querySelector("#tableViewContainer > div");
+    if (scrollWrapper) {
+        scrollWrapper.addEventListener("scroll", () => closeNoteModal(), { passive: true });
+    }
+});
+
 // 掛載至 window 供 HTML 行內事件呼叫
 Object.assign(window, {
     fetchXinfengWeather: (isManual) => fetchXinfengWeather(isManual, showToast),
@@ -1503,5 +1574,3 @@ Object.assign(window, {
     handleSearch,
     showToast
 });
-
-window.addEventListener("DOMContentLoaded", initApp);
