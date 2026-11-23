@@ -84,6 +84,9 @@ function logoutAdmin() {
     if (!isAdminLoggedIn) return;
     if (confirm("確定要登出管理者身分嗎？")) {
         isAdminLoggedIn = false;
+        copiedAmount = null;
+        const copiedBadge = document.getElementById("copiedBadge");
+        if (copiedBadge) copiedBadge.classList.add("hidden");
         localStorage.removeItem("team_expense_is_admin");
         updateAdminUI();
         showToast("已登出管理者身分");
@@ -574,6 +577,7 @@ function switchViewMode(mode) {
 }
 
 function copyAmount(val, colId) {
+    if (!isAdminLoggedIn) return;
     copiedAmount = val;
     document.getElementById("copiedAmountText").innerText = val.toLocaleString();
     document.getElementById("copiedBadge").classList.remove("hidden");
@@ -753,7 +757,7 @@ function renderTable() {
                 <td class="py-1 px-1 border-r border-slate-100 text-center relative group/cell">
                     <div class="flex items-center justify-center">
                         ${cellInputHTML}
-                        ${val !== "" ? `
+                        ${isAdminLoggedIn && val !== "" ? `
                             <button onclick="copyAmount(${val}, '${col.id}')" class="opacity-0 group-hover/cell:opacity-100 transition text-slate-400 hover:text-emerald-600 ml-0.5 px-0.5" title="複製此金額">
                                 <i class="fa-regular fa-copy text-[10px] sm:text-[11px]"></i>
                             </button>
